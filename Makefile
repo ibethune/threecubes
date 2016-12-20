@@ -5,10 +5,10 @@
 #############################################################
 
 CC = g++
-LD = ld
+LD = g++
 
 CFLAGS = -O2 -funroll-all-loops -falign-functions=64 -Wall -pedantic
-LFLAGS = -static -L/usr/lib64 -lm -lgmp -lgmpxx 
+LFLAGS = -L/opt/local/lib -lm -lgmp -lgmpxx 
 
 DEPS = festkomma.h
 
@@ -25,9 +25,8 @@ all:    elkies_allg
 # GMP muss statisch gelinkt werden, weil es nur auf dem Hauptrechner gwdu105
 # installiert ist. 
 elkies_allg: $(OBJ)
-	$(LD) -r -o $@_prov.o $^ $(LFLAGS)
-	$(CC) -o $@ $@_prov.o
-	strip elkies_allg
+	$(LD) -o $@ $^ $(LFLAGS)
+#	strip elkies_allg
 
 clean:	
 	rm -rf *.o

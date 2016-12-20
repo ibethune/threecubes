@@ -34,6 +34,8 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 *****************************************************************/
 
 
+typedef unsigned long int ulong;
+
 #include<gmp.h>
 
 typedef unsigned long int UDItype;
