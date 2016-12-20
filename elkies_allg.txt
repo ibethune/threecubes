@@ -1,0 +1,134 @@
+#####################################################################
+# file elkies_allg.doc
+# Authors: Andreas-Stephan Elsenhans and Joerg Jahnel
+#   Email: elsenhan@uni-math.gwdg.de, jahnel@uni-math.gwdg.de
+#   Web:   http://www.gwdg.de/jahnel
+# Date: 2007-12-03
+#####################################################################
+
+BE ALERT: This package ASSUMES that a "long int" is a 64-bit integer.
+          On 32-bit machines it is highly unlikely to run properly.
+
+
+HOW TO USE IT:
+
+1. Edit the three numbers SUCHWEITE (search bound), UNTERSCHRANKE, and
+AUSGABE_SCHRANKE in the file elkies_allg.c.
+2. Start something like
+       elkies_allg 0.00003 0.794 .
+
+This causes Elkies' method to be performed over the interval 0.00003..0.794.
+You might want to do this on several machines and break the interval
+0.00003..0.794 into pieces.
+
+Then, all solutions of
+       x**3 + y**3 = z**3 + k
+will be found for 0 < k < AUSGABE_SCHRANKE which are of a height at least
+UNTERSCHRANKE and at most SUCHWEITE.
+(Actually, some but not all smaller solutions will also be found and many solutions will be found more than once.)
+
+The upper bound (0.794) should be close to 0.5**(1/3) but above that number.
+The lower bound should be near zero but bigger than (3/SUCHWEITE)**(1/3).
+
+
+SOME DOCUMENTATION (in German):
+
+Suche nach Loesungen von
+       x**3 + y**3 = z**3 + k
+fuer k nicht zu grosz.
+
+Der Code ist eine Implementation von Elkies' Method.
+
+Dies bedeutet in etwa folgendes:
+x_0 laeuft von 0 (besser etwa 1.0e-5) bis 1/\sqrt[3]{2} in Schritten der
+Groesze 2*halbe_schrittweite.
+
+Aktuell ist jeweils das Intervall
+       [x_0 - halbe_schrittweite, x_0 + halbe_schrittweite].
+Ueber diesem Intervall wird ein Parallelogramm, die "Fliese", betrachtet,
+welche die Kurve y = (1 - x**3)**(1/3) ueber diesem Intervall ueberdeckt.
+
+Die dafuer notwendige halbe_fliesenbreite ist eigentlich
+       y''(\xi) * halbe_schrittweite**2 / 4
+mit einem Zwischenpunkt
+       \xi \in [x_0 - halbe_schrittweite, x_0 + halbe_schrittweite].
+Wir setzen mit etwas Luft
+       halbe_fliesenbreite :=  1.001 * y''(x_0) * halbe_schrittweite**2 / 4
+                             + zusatzsummand
+an und erneuern die Rechnung alle FLIESE_NEU Fliesen.
+
+Der Zusatzsummand dient dazu, dass auch Punkte knapp neben der Kurve noch
+sicher gefunden werden.
+       x**3 + y**3 = z**3 \pm k
+liefert
+       Y**3 = 1 - X**3 \pm k/z**3
+mit Y := y/z und X := x/z. Dies liefert
+       Y = sqrt[3]{1 - X**3} \pm k/z**3 * Y'(1 - X**3).
+|Y'| ist durch 1 nach oben beschraenkt. Damit ist der Abstand des Punktes von
+der Kurve hoechstens
+       k/z**3.
+Wir waehlen zusatzsummand := 1.0e-30. Das solle garantieren, dass alle
+Loesungen der Hoehe >10**11 fuer k < 1000 gefunden werden.
+
+Die obere und und die untere Seite des Parallelogramms haben Anstieg y'(x_0).
+Die Kurve y = (1 - x**3)**(1/3) liegt immer unterhalb ihrer Tangenten.
+Wir setzen deshalb
+       fliesenversatz := y''(x_0) * halbe_schrittweite**2 / 4
+an und waehlen
+       y = Ax + B
+als Mittellinie der Fliese, wobei A := y'(x_0) gesetzt wird und B durch
+       y (x_0) = A*x_0 + B + fliesenversatz
+bestimmt wird.
+
+Gilt x**3 + y**3 = z**3 + k und sind x, y und z nicht zu klein, dann liegt
+(x/z, y/z) sehr nahe an der Kurve y = (1 - x**3)**(1/3).
+Das bedeutet, (x/z, y/z) liegt im Laufe der Schleife ueber x_0 einmal
+innerhalb einer Fliese. */ /*
+
+Wir suchen rationale Punkte innerhalb einer Fliese mit |z| < SUCHWEITE.
+(x/z, y/z) liegt in der Fliese genau dann, wenn
+       |x/z - x_0| < halbe_schrittweite
+und
+       |y/z - A*x/z - B| < halbe_fliesenbreite
+gelten.
+
+Das impliziert
+(1)    |z / SUCHWEITE| < 1
+und (mit Verschenken)
+       |x - x_0 * z| < halbe_schrittweite * z < halbe_schrittweite * SUCHWEITE,
+also
+(2)    |(x - x_0 * z) / (halbe_schrittweite * SUCHWEITE)| < 1
+sowie (auch mit verschenken)
+       |y - A*x - B*z| < halbe_fliesenbreite * z
+                       < halbe_fliesenbreite * SUCHWEITE,
+also
+(3)    |(y - A*x - B*z) / (halbe_fliesenbreite * SUCHWEITE)| < 1.
+
+Wir haben somit drei Linearformen l1, l2 und l3, die jeweils betragsmaeszig
+kleiner als 1 bleiben sollen.
+
+Etwas genauer wollen wir Loesungen mit z > 0 suchen.
+Dies bedeutet
+        0 < l1 < 1.
+(Loesungen mit z = 0 gibt es bestimmt nicht, also duerfen wir auch l1 \neq 0
+annehmen.) Die beiden weiteren Bedingungen sind etwas praeziser
+     |l2| < l1
+und
+     |l3| < l1.
+Dies definiert eine Pyramide mit den Ecken
+      (l1,l2,l3) = (0,0,0), (1,1,1), (1,1,-1), (1,-1,1) und (1,-1,-1).
+Nur Gitterpunkte im Innern dieser Pyramide werden wirklich gebraucht.
+
+Wir starten mit einer LLL-Reduktion des Standardgitters nach dem durch
+        q := l1**2 + l2**2 + l3**2
+bestimmten Skalarprodukt. Danach suchen wir Punkte im Innern der Pyramide in
+recht naiver Weise.
+
+In Wirklichkeit laufen wir rueckwaerts durch das Intervall [0, 1/sqrt[3]{2}].
+Der Grund ist, dass die Kruemmung der Kurve y = (1 - x**3)**(1/3) monoton
+faellt. Deshalb ist die Fliesenbreite immer am Intervallende auszurechnen.
+
+Haben eine 128-Bit-Festkommaarithmetik eingefuehrt.
+
+Auch bei der Berechnung von y'(x_0) jetzt Newton-Nachiteration
+statt teurer mpf-Division.
