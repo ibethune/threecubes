@@ -136,7 +136,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
 #define red_k_k1_mpf()                                                         \
     do                                                                         \
     {                                                                          \
-        /* printf ("Do RED (%ld, %ld).\n", k, k-1); */                      \
+        /* printf ("Do RED (%ld, %ld).\n", k, k-1); */                         \
         tm = floor(mu[k][k - 1] + 0.5);                                        \
         q = tm.get_si();                                                       \
         if (!tm.fits_slong_p())                                                \
@@ -154,7 +154,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
 #define red_2_0_mpf()                                                          \
     do                                                                         \
     {                                                                          \
-        /* printf ("Do RED (2, 0).\n"); */                                  \
+        /* printf ("Do RED (2, 0).\n"); */                                     \
         tm = floor(mu[2][0] + 0.5);                                            \
         q = tm.get_si();                                                       \
         if (!tm.fits_slong_p())                                                \
@@ -170,7 +170,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
 #define lll_swap()                                                             \
     do                                                                         \
     {                                                                          \
-        /* printf ("Do SWAP (%ld).\n", k); */                               \
+        /* printf ("Do SWAP (%ld).\n", k); */                                  \
         for (i = 0; i < 3; i++)                                                \
         {                                                                      \
             tmp = vec[k][i];                                                   \
