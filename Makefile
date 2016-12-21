@@ -10,23 +10,20 @@ LD = g++
 CFLAGS = -O2 -funroll-all-loops -falign-functions=64 -Wall -pedantic
 LFLAGS = -L/opt/local/lib -lm -lgmp -lgmpxx 
 
-DEPS = festkomma.h
+DEPS = fixedpoint.h
 
-OBJ = elkies_allg.o elkies_allg_init.o
+OBJ = elkies_alg.o elkies_alg_init.o
 
 VPATH = .
 
-all:    elkies_allg
+all:    elkies_alg
 
 %.o:%.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-# Zweistufiges Linken.
-# GMP muss statisch gelinkt werden, weil es nur auf dem Hauptrechner gwdu105
-# installiert ist. 
-elkies_allg: $(OBJ)
+elkies_alg: $(OBJ)
 	$(LD) -o $@ $^ $(LFLAGS)
-#	strip elkies_allg
+#	strip elkies_alg
 
 clean:	
-	rm -rf *.o elkies_allg
+	rm -rf *.o elkies_alg

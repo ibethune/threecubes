@@ -1,6 +1,6 @@
 /****************************************************************
 
-file elkies_allg.c
+file elkies_alg.c
 
 Elkies package for the three cubes problem,
 Version 1.0
@@ -39,7 +39,7 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 #include <limits.h>
 #include <gmp.h>
 #include <math.h>
-#include "festkomma.h"
+#include "fixedpoint.h"
 
 #define UPPER_BOUND 1.0e14
 #define LOWER_BOUND 1.0e11
@@ -548,7 +548,7 @@ inline void lll(double l[3][3], long vec[3][3])
         if (B[k] < ((0.99 - mu[k][k - 1] * mu[k][k - 1]) * B[k - 1]))
         {
             /* if (B[k] < 0.5 * B[k-1]) { */
-            /* sprintf (output, "Swap mit k = %ld \n", k); out (); */
+            /* sprintf (output, "Swap with k = %ld \n", k); out (); */
             lll_swap();
             /* out (); */
         }
@@ -1023,7 +1023,7 @@ void compute_interval(mpx_t x_0_start, mpx_t x_0_end)
 }
 
 /* Run with something like:
-      elkies_allg 0.4 0.000001
+      elkies_alg 0.4 0.000001
 
    Where 0.4 is the initial value.
    0.000001 is the interval length that should be processed. */
@@ -1046,7 +1046,7 @@ int main(int argc, char *argv[])
     mpf_set_mpx(tmp1, x_0_start);
     mpf_set_mpx(tmp2, x_0_end);
     /* Name of the output file */
-    gmp_sprintf(file, "liste_allg_%.*Ff_%.*Ff.txt", 8, tmp1, 8, tmp2);
+    gmp_sprintf(file, "list_alg_%.*Ff_%.*Ff.txt", 8, tmp1, 8, tmp2);
 
     /* First output */
     gmp_sprintf(output, "Start computing from %.*Ff to %.*Ff.\n", 15, tmp1, 15,

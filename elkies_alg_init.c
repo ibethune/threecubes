@@ -1,6 +1,6 @@
 /****************************************************************
 
-file elkies_allg_init.c
+file elkies_alg_init.c
 
 Elkies package for the three cubes problem,
 Version 1.0
@@ -35,14 +35,14 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 
 #include <gmpxx.h>
 #include <math.h>
-#include "festkomma.h"
+#include "fixedpoint.h"
 
 mpf_class y3(0, 128);
 mpf_class tmpxx(0, 128), Axx(0, 128), Bxx(0, 128);
 
 /******************************************************************************
  *
- * INIT -- Funktionen (Rechnungen in mpf-class)
+ * Initialisation functions (implemented with mpf_class)
  *
  *****************************************************************************/
 
@@ -53,14 +53,14 @@ void compute_y_value_mpf(mpf_class x_0, mpf_class &y_0)
 
     tmp = 1 - x_0 * x_0 * x_0;
     y_0 = pow(tmp.get_d(), 1.0 / 3);
-    y_0 = (2 * y_0 + tmp / (y_0 * y_0)) / 3; /* double ist nicht genau genug!
-                                                Eine Newton-Iteration. */
+    y_0 = (2 * y_0 + tmp / (y_0 * y_0)) / 3; /* Double is not accurate enough!
+                                                One Newton iteration. */
 }
 
-/* Berechnung von l1, l2 und l3 mit hoher Genauigkeit.
-   Genauer wird li[j] = L_i (v_j) ausgerechnet.
-   Besonders bei l[2] tritt extreme Ausloeschung auf, weshalb die hohe
-   Genauigkeit gebraucht wird.*/
+/* Calculation of l1, l2 and l3 with high accuracy.
+   More precisely, li[j] = L_i (v_j) is calculated.
+   Particularly for l[2] there is the chance of cancellation,
+   which is why we need high accuracy. */
 void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
                                mpf_class y_0, double half_step,
                                mpx_t tile_offset, double d, double N)
@@ -68,9 +68,9 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
     long i;
 
     Axx = -x_0 * x_0 / (y_0 * y_0);
-    /* Ableitung von
+    /* Derivation of
            y(x) := (1 - x**3)**(1/3)
-       nach dem Satz ueber implizite Funktionen. */
+    according to the theorem of implicit functions. */
     /* A = (y_1 - y_0) / (x_1 - x_0); */
     /* A = - x_0*x_0 / pow (1 - x_0*x_0*x_0, 2.0/3.0); */
 
@@ -87,7 +87,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
     }
 }
 
-/* Makros fuer lll_mpf. */
+/* Macros for lll_mpf. */
 #define scal_prod_mpf(prod, l, vec1, vec2)                                     \
     do                                                                         \
     {                                                                          \
@@ -136,7 +136,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
 #define red_k_k1_mpf()                                                         \
     do                                                                         \
     {                                                                          \
-        /* printf ("Mache RED (%ld, %ld).\n", k, k-1); */                      \
+        /* printf ("Do RED (%ld, %ld).\n", k, k-1); */                      \
         tm = floor(mu[k][k - 1] + 0.5);                                        \
         q = tm.get_si();                                                       \
         if (!tm.fits_slong_p())                                                \
@@ -154,7 +154,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
 #define red_2_0_mpf()                                                          \
     do                                                                         \
     {                                                                          \
-        /* printf ("Mache RED (2, 0).\n"); */                                  \
+        /* printf ("Do RED (2, 0).\n"); */                                  \
         tm = floor(mu[2][0] + 0.5);                                            \
         q = tm.get_si();                                                       \
         if (!tm.fits_slong_p())                                                \
@@ -170,7 +170,7 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
 #define lll_swap()                                                             \
     do                                                                         \
     {                                                                          \
-        /* printf ("Mache SWAP (%ld).\n", k); */                               \
+        /* printf ("Do SWAP (%ld).\n", k); */                               \
         for (i = 0; i < 3; i++)                                                \
         {                                                                      \
             tmp = vec[k][i];                                                   \
@@ -200,10 +200,12 @@ void compute_three_linearf_mpf(mpf_class l[3][3], long v[3][3], mpf_class x_0,
     } while (0)
 
 /* LLL -- mpf-Version.
-   Die Funktion erwartet die drei Linearformen als in l gegeben.
-   Sie gibt in v einen Satz von fuer l kurzen Vektoren zurueck.
-   Der Ablauf des Algorithmus ist (bis auf einen Fehler in gram) von H. Cohen
-   uebernommen. */
+   
+   The function expects the three linear forms to be given in l.
+   It returns in v a set of l short vectors(?).
+
+   The steps of the algorithm are (apart from an error in gram() ) taken from H. Cohen.
+   */
 inline void lll_mpf(mpf_class l[3][3], long vec[3][3])
 {
     long i, k;
@@ -212,7 +214,7 @@ inline void lll_mpf(mpf_class l[3][3], long vec[3][3])
     long q, tmp;
     mpf_class muc, Bc, t, tm;
 
-    /* Das Standardgitter. */
+    /* Standard basis. */
     vec[0][0] = 1;
     vec[0][1] = 0;
     vec[0][2] = 0;
@@ -235,7 +237,7 @@ inline void lll_mpf(mpf_class l[3][3], long vec[3][3])
         /* Test LLL condition */
         if (B[k] < ((0.99 - mu[k][k - 1] * mu[k][k - 1]) * B[k - 1]))
         {
-            /* printf ("Swap mit k = %ld \n", k); */
+            /* printf ("Swap with k = %ld \n", k); */
             lll_swap();
             /* out (); */
         }
@@ -248,8 +250,8 @@ inline void lll_mpf(mpf_class l[3][3], long vec[3][3])
     }
 }
 
-/* Rechnet einen Satz kurzer Vektoren fuer die erste Fliese aus.
-   Berechnet auszerdem einen Startwert fuer y_0. */
+/* Computes a set of vectors for the first tile.
+   Also computes a starting value for y_0. */
 void init(long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt, double half_step,
           mpx_t tile_offset, double half_tilewidth, double upper_bound)
 {
@@ -266,7 +268,7 @@ void init(long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt, double half_step,
     /* gmp_printf ("y_0 = %.*Ff.\n\n", 15, y_0.get_mpf_t ()); */
     mpx_set_mpf(y_0_xt, y_0.get_mpf_t());
 
-    /* Standardbasis */
+    /* Standard basis */
     for (i = 0; i < 3; i++)
         for (j = 0; j < 3; j++)
             e[i][j] = 0;

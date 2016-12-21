@@ -1,5 +1,5 @@
 #####################################################################
-# file elkies_allg.doc
+# file elkies_alg.doc
 # Authors: Andreas-Stephan Elsenhans and Joerg Jahnel
 #   Email: elsenhan@uni-math.gwdg.de, jahnel@uni-math.gwdg.de
 #   Web:   http://www.gwdg.de/jahnel
@@ -13,9 +13,9 @@ BE ALERT: This package ASSUMES that a "long int" is a 64-bit integer.
 HOW TO USE IT:
 
 1. Edit the three numbers UPPER_BOUND, LOWER_BOUND (lower bound), and
-MAX_K (upper bound) in the file elkies_allg.c.
+MAX_K (upper bound) in the file elkies_alg.c.
 2. Start something like
-       elkies_allg 0.00003 0.794 .
+       elkies_alg 0.00003 0.794 .
 
 This causes Elkies' method to be performed over the interval 0.00003..0.794.
 You might want to do this on several machines and break the interval
