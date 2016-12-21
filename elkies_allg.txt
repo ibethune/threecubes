@@ -55,8 +55,7 @@ Where \xi lies in the range:
 Adding a little margin, the half tile-width is 
        half_tilewidth :=  1.001 * y''(x_0) * half_step**2 / 4
                              + padding
-Something gets renews every FLIESE_NEU tiles (unclear, original German is)
-an und erneuern die Rechnung alle FLIESE_NEU Fliesen.
+This calculation is renewed every NEW_TILES tiles.
 
 The extra allows points that lie close to the curve such that
        x**3 + y**3 = z**3 \pm k

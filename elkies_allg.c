@@ -41,16 +41,16 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 #include <math.h>
 #include "festkomma.h"
 
-#define UPPER_BOUND 1.0e14
-#define LOWER_BOUND 1.0e11
+#define UPPER_BOUND 3.0e14 // 1.0e14
+#define LOWER_BOUND 6.0e13 // 1.0e11
 
 /* Triples with |x**3 + y**3 - z**3| < MAX_K are allowed. */
-#define MAX_K 1000
+#define MAX_K 75 //1000
 
 /* The global variables half_step, half_tilewidth und
    tile_offset are calculated in compute_tile_params().
 
-   This function will perform all FLEISE_NEU iterations of the
+   This function will perform all NEW_TILES iterations of the
    outermost loop.
    The FACTOR controls the size of the tile.
 
@@ -66,7 +66,7 @@ WWW     http://www.uni-math.gwdg.de/jahnel
    This value is set as 1.001 * (FACTOR/UPPER_BOUND)**3.
    Thus FACTOR, UPPER_BOUND and the current second derivative control the
    half_step und half_tilewidth calculation. */
-#define FLIESE_NEU 1000000
+#define NEW_TILES 1000000
 #define FACTOR 5.5
 double half_step, half_tilewidth;
 mpx_t x_0, tile_offset, Ax;
@@ -154,11 +154,11 @@ inline long matrix_prod(long pr[3][3], long m1[3][3], long m2[3][3])
    point x_0 \in [0,1]. */
 void compute_tile_params(mpx_t step)
 {
-    double x, second_derivative, padding;
+    double x, second_deriv, padding;
     long do_output;
 
-    /* Output only every 100*FLIESE_NEU tiles. */
-    do_output = tiles % (100 * FLIESE_NEU);
+    /* Output only every 100*NEW_TILES tiles. */
+    do_output = tiles % (100 * NEW_TILES);
 
     x = mpx_get_d(x_0);
 
@@ -170,12 +170,12 @@ void compute_tile_params(mpx_t step)
         out();
     }
 
-    second_derivative = 2 * x / pow(1 - x * x * x, 5.0 / 3.0);
-    half_step = pow(second_derivative, -1.0 / 3.0) * FACTOR / UPPER_BOUND;
+    second_deriv = 2 * x / pow(1 - x * x * x, 5.0 / 3.0);
+    half_step = pow(second_deriv, -1.0 / 3.0) * FACTOR / UPPER_BOUND;
 
     padding = MAX_K / (LOWER_BOUND * LOWER_BOUND * LOWER_BOUND);
     half_tilewidth =
-        1.001 * second_derivative * half_step * half_step / 4 + padding;
+        1.001 * second_deriv * half_step * half_step / 4 + padding;
     /* padding chosen so that solutions of
        size >LOWER_BOUND are guaranteed. */
 
@@ -187,20 +187,20 @@ void compute_tile_params(mpx_t step)
     }
 
     mpx_set_d(step, 2 * half_step);
-    mpx_set_d(tile_offset, second_derivative * half_step * half_step / 4);
+    mpx_set_d(tile_offset, second_deriv * half_step * half_step / 4);
 }
 
 /***************************************************************************
  *
- * Eigentlicher Code
+ * Actual computational routines...
  *
  **************************************************************************/
 
-/* Wird einmal pro FLIESE_NEU Fliesen aufgerufen.
-   Berechnet 1/y_0 (- 1) aufwendig und exakt. */
+/* Called once every NEW_TILES tiles. Wird einmal pro NEW_TILES Fliesen aufgerufen.
+   Computes 1/y_0 -1 - expensive and exact. */
 void y_inv_init(mpx_t y_0)
 {
-    /* Initialisierung von y_inv. */
+    /* Initialisation of y_inv. */
     mpf_set_ui(tmp1, 1);
     mpf_set_mpx(tmp2, y_0);
     mpf_div(tmp1, tmp1, tmp2);
@@ -209,22 +209,22 @@ void y_inv_init(mpx_t y_0)
     /* gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
 }
 
-/* Wird einmal pro FLIESE_NEU Fliesen aufgerufen.
-   Initialisiert y_diff als y'(x_0) * step.
-   Berechnet y_inv_diff als y_diff / y_0**2. */
+/* Called once every NEW_TILES tiles.
+   Initialises y_diff to y'(x_0) * step.
+   Computes y_inv_diff as y_diff / y_0**2. */
 void y_diff_init(mpx_t y_0, mpx_t step)
 {
     double diff, y;
 
-    /* Initialisierung von y_diff. */
+    /* Initialisation of y_diff. */
     mpx_mul(y_diff, Ax, step);
-    /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
+    /* If y_0 < x_0 then Ax > 1. Correct it here. */
     if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
         mpx_add(y_diff, y_diff, step);
     /* mpf_set_mpx (tmp1, y_diff);
     gmp_sprintf (output, "y_diff = %.*Ff.\n\n", 40, tmp1); */
 
-    /* Initialisierung von y_inv_diff. */
+    /* Initialisation of y_inv_diff. */
     y = mpx_get_d(y_0);
     diff = mpx_get_d(y_diff) / (y * y);
     mpx_set_d(y_inv_diff, diff);
@@ -239,18 +239,19 @@ inline void compute_y_value(mpx_t y_0)
     mpx_t tmpx1, tmpx2, tmpx3;
 
     mpx_add(y_0, y_0, y_diff);
-    /* y_0 -= step * A. Lineare Verbesserung des Startwerts.
-       Minus, weil wir rueckwaerts durch das Intervall laufen.
-       y_diff wird einmal pro 1000000 Fliesen ausgerechnet.
-       A ist immer negativ, also (-step)*A > 0.
-       Beachte, y_diff > 0 nach Initialisierung. */
+    /* y_0 -= step * A. 
+       Linear improvements of the startin value.
+       Minus, because we run backwards through the interval.
+       y_diff s calculated once per 1000000 (FLEISEN_NEU) tiles.
+       A is always negative, so (-step)*A > 0.
+       NB: y_diff > 0 after initialisation. */
 
     mpx_mul(tmpx1, x_0, x_0);
     mpx_mul(tmpx2, tmpx1, x_0);
     tmpx3[0] = ~tmpx2[0];
     tmpx3[1] = ~tmpx2[1];
     /* y3 = 1 - x_0*x_0*x_0; */
-    /* Wir machen einen Fehler von exakt 2**(-128). */
+    /* We make an error here of exactly 2**(-128). */
 
     mpx_mul(tmpx1, y_0, y_0);
     nenner = 3.0 * mpx_get_d(tmpx1);
@@ -268,62 +269,61 @@ inline void compute_y_value(mpx_t y_0)
 
     mpx_set_d(tmpx1, diff);
     mpx_sub(y_0, y_0, tmpx1);
-    /* Eine Newton-Iteration. */
+    /* One Newton Iteration. */
     /* y_0 = (2*y_0 + y3/(y_0*y_0)) / 3
            = (2*y_0*y_0*y_0 + y3) / (3*y_0*y_0)
            = y_0 + (y3 - y_0*y_0*y_0) / (3*y_0*y_0);
-       Differenz kann in double berechnet werden. */
-    /* Eine Newton-Iteration. */
+       Difference can be computed in double precision. */
+    /* One Newton Iteration. */
 
     /* mpf_set_mpx (tmp1, y_0);
     gmp_sprintf (output, "y_0 = %.*Ff.\n", 40, tmp1); out (); */
 }
 
-/* Schreibt y'(x_0) in die globale Variable Ax. */
-inline void berechne_y_strich(mpx_t y_0)
+/* Store y'(x_0) in global variable Ax. */
+inline void compute_y_deriv(mpx_t y_0)
 {
     mpx_t tmpx1, tmpx2;
 
-    /* Berechne zunaechst 1/y_0. */
+    /* First compute 1/y_0. */
 
-    /* Lineare Verbesserung des Startwerts. */
+    /* Linear improvement of starting value */
     mpx_sub(y_inv, y_inv, y_inv_diff);
 
-    /* Jetzt Newton-Iteration inv_neu = inv + (1 - y_0 * inv) * inv.
-    Da y_inv den Wert 1/y - 1 annaehert, muessen wir
+    /* Now Newton Iteration inv_new = inv + (1 - y_0 * inv) * inv.
+    Since y_inv is 1/y - 1, we must compute:
          y_inv = y_inv + (1 - y_0 * (1 + y_inv)) * (1 + y_inv)
                = y_inv + (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) *
-    y_inv
-    rechnen. */
+                 y_inv */
     mpx_mul(tmpx1, y_0, y_inv);
     mpx_add(tmpx2, tmpx1, y_0); /* tmpx2 ist y_0 + y_0 * y_inv. */
     tmpx2[0] = ~tmpx2[0];
     tmpx2[1] = ~tmpx2[1];
-    /* tmpx2 ist jetzt 1 - y_0 - y_0 * y_inv. Fehler von 2**(-128) ignoriert. */
+    /* tmpx2 is now 1 - y_0 - y_0 * y_inv. Error of 2**(-128) is ignored. */
     mpx_mul(tmpx1, tmpx2, y_inv);
     mpx_add(tmpx1, tmpx1, tmpx2);
-    /* tmpx1 ist (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) * y_inv. */
+    /* tmpx1 is (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) * y_inv. */
     mpx_add(y_inv, y_inv, tmpx1);
     /* mpf_set_mpx (tmp1, y_inv);
     gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
 
-    /* Berechne jetzt
+    /* Now compute
             y'(x_0) = Ax := x_0**2 / y_0**2
                     = x_0**2 * (1 + y_inv)**2
                     = x_0**2 + x_0**2 * (y_inv**2 + 2*y_inv). */
     mpx_mul(tmpx1, y_inv, y_inv);
     mpx_add(tmpx1, tmpx1, y_inv);
-    mpx_add(tmpx1, tmpx1, y_inv); /* tmpx1 ist jetzt y_inv**2 + 2*y_inv. */
-    mpx_mul(tmpx2, x_0, x_0);     /* tmpx2 ist x_0**2. */
-    mpx_mul(Ax, tmpx2, tmpx1); /* Ax ist jetzt x_0**2 * (y_inv**2 + 2*y_inv). */
+    mpx_add(tmpx1, tmpx1, y_inv); /* tmpx1 is now y_inv**2 + 2*y_inv. */
+    mpx_mul(tmpx2, x_0, x_0);     /* tmpx2 is x_0**2. */
+    mpx_mul(Ax, tmpx2, tmpx1); /* Ax is now x_0**2 * (y_inv**2 + 2*y_inv). */
     mpx_add(Ax, Ax, tmpx2);
     /* mpf_set_mpx (tmp1, Ax);
     gmp_sprintf (output, "A = %.*Ff.\n", 40, tmp1); */
 
     /* Ax = - x_0*x_0 / (y_0*y_0); */
-    /* Ableitung von
+    /* Derivation of
            y(x) := (1 - x**3)**(1/3)
-       nach dem Satz ueber implizite Funktionen. */
+       according to the theorem of implicit functions. */
     /* A = (y_1 - y_0) / (x_1 - x_0); */
     /* A = - x_0*x_0 / pow (1 - x_0*x_0*x_0, 2.0/3.0); */
 }
@@ -337,25 +337,25 @@ inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
     /* mpf_set_mpx (tmp1, x_0);
     gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
     mpx_mul(tmpx1, Ax, x_0);
-    /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
+    /* If y_0 < x_0 then Ax > 1. Correct it here. */
     if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
         mpx_add(tmpx1, tmpx1, x_0);
 
     /* mpf_set_mpx (tmp1, tile_offset);
     gmp_sprintf (output, "tile_offset = %.*Ff.\n", 40, tmp1); out (); */
     mpx_sub(tmpx2, y_0, tile_offset);
-    mpx_add(Bx, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
+    mpx_add(Bx, tmpx1, tmpx2); /* Ax is always negative. */
     /* Bx = y_0 - tile_offset - Ax * x_0; */
-    /* Es gilt 1 <= Bx <= 1.6. Speichern in Wirklichkeit Bx - 1. */
+    /* 1 <= Bx <= 1.6. Actually store Bx - 1. */
     /* mpf_set_mpx (tmp1, Ax); mpf_set_mpx (tmp2, Bx);
-    gmp_sprintf (output, "A = %.*Ff.\nB = %.*Ff.\n", 40, tmp1, 40, tmp2); out
-    (); */
+    gmp_sprintf (output, "A = %.*Ff.\nB = %.*Ff.\n", 40, tmp1, 40, tmp2);
+    out(); */
 
     for (i = 0; i < 3; i++)
     {
         l[0][i] = v[i][2] / N;
         /* sprintf (output, "l[0][%ld] = %f.\n", i, l[0][i]); out (); */
-        /* Hier keine Probleme mit der Genauigkeit. */
+        /* No problem with accuracy here */
 
         mpx_mul_si(tmpx1, x_0, -v[i][2]);
         mpxb_add_si(tmpx2, tmpx1, v[i][0]);
@@ -363,33 +363,31 @@ inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
         l[1][i] = mpxg_get_d_simple(tmpx2);
         l[1][i] /= (half_step * N);
         /* sprintf (output, "l[1][%ld] = %f.\n", i, l[1][i]); out (); */
-        /* Es ist step*N \approx 100.
-           Wir brauchen also tmp2 auf >2 (7?) Nachkommastellen.
-           Hierfuer sollte double ausreichen.
-           tmp2 ist auf 128 Bit, also >=23 Nachkommastellen genau. */
+        /* step*N \approx 100.
+           So we need tmp2 to >2 (7?) decimal places.
+           Double precision should suffice.
+           tmp2 is 128 Bit, also >=23 decimal places of precision. */
 
         mpx_mul_si(tmpx1, Ax, v[i][0]);
-        /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach.
-         */
+        /* If y_0 < x_0 then Ax > 1. Correct it here. */
         if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
             mpxb_add_si(tmpx1, tmpx1, v[i][0]);
 
         mpx_mul_si(tmpx2, Bx, -v[i][2]);
-        mpx_add(tmpx3, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
+        mpx_add(tmpx3, tmpx1, tmpx2); /* Ax is always negative. */
         mpxb_add_si(tmpx1, tmpx3, v[i][1] - v[i][2]); /* Bx \in [1..2]. */
         /* tmpx = v[i][1] - Ax * v[i][0] - Bx * v[i][2]; */
         l[2][i] = mpxg_get_d(tmpx1);
         l[2][i] /= (d * N);
         /* sprintf (output, "l[2][%ld] = %f.\n", i, l[2][i]); out (); */
-        /* l[2][i] reagiert am sensibelsten auf zu wenig Precision.
-           Es ist d*N \approx 1.0e-15.
-           Wir brauchen also tmp2 auf > 15 (20?) Dezimalstellen hinter dem
-           Komma.
-           Also Ax und Bx auf 35 Dezimalstellen, entsprechend 128 Bit. */
+        /* l[2][i] is very sensitive to lack of precision.
+           d*N \approx 1.0e-15.
+           So we need tmp2 to > 15 (20?) decimal places.
+           Also Ax and Bx to 35 decimal places, corresponding to 128 Bit. */
     }
 }
 
-/* Makros fuer lll. */
+/* Macros for LLL. */
 #define scal_prod(prod, l, vec1, vec2)                                         \
     do                                                                         \
     {                                                                          \
@@ -440,10 +438,10 @@ inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
 #define red_k_k1()                                                             \
     do                                                                         \
     {                                                                          \
-        /* sprintf (output, "Mache RED (%ld, %ld).\n", k, k-1); out (); */     \
+        /* sprintf (output, "Do RED (%ld, %ld).\n", k, k-1); out (); */     \
         tm = floor(mu[k][k - 1] + 0.5);                                        \
         /* if (fabs (tm) > (1LU << 63) - 1) {                                  \
-         sprintf (output, "q ist zu lang.\n"); out ();                         \
+         sprintf (output, "q is too long.\n"); out ();                         \
          exit (0);                                                             \
         } */                                                                   \
         q = lround(tm);                                                        \
@@ -460,11 +458,11 @@ inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
 #define red_2_0()                                                              \
     do                                                                         \
     {                                                                          \
-        /* sprintf (output, "Mache RED (2, 0).\n"); out (); */                 \
+        /* sprintf (output, "Do RED (2, 0).\n"); out (); */                 \
         tm = floor(mu[2][0] + 0.5);                                            \
         q = lround(tm);                                                        \
         /* if (fabs (tm) > (1LU << 63) - 1) {                                  \
-         sprintf (output, "q ist zu lang.\n"); out ();                         \
+         sprintf (output, "q is too long.\n"); out ();                         \
          exit (0);                                                             \
         } */                                                                   \
         if (q != 0)                                                            \
@@ -475,7 +473,7 @@ inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
 #define lll_swap()                                                             \
     do                                                                         \
     {                                                                          \
-        /* sprintf (output, "Mache SWAP (%ld).\n", k); out (); */              \
+        /* sprintf (output, "Do SWAP (%ld).\n", k); out (); */              \
         for (i = 0; i < 3; i++)                                                \
         {                                                                      \
             tmp = vec[k][i];                                                   \
@@ -504,20 +502,20 @@ inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
         k = 1;                                                                 \
     } while (0)
 
-/* LLL -- double-Version.
-   Die Funktion erwartet die drei Linearformen als in l gegeben.
-   Sie gibt in v einen Satz von fuer l kurzen Vektoren zurueck.
+/* LLL -- double-version.
+   The function expects the three linear forms to be given in l.
+   It returns in v a set of l short vectors(?).
 
-   Der Ablauf des Algorithmus ist (bis auf einen Fehler in gram) von H. Cohen
-   uebernommen.
+   The steps of the algorithm are (apart from an error in gram() ) taken from H. Cohen.
 
-   Wir wenden lll in der Weise an, dasz l schon bezueglich einer bestimmten
-   Basis ausgerechnet ist. Die Rueckgabematrix vec ist dann eine
-   Transformationsmatrix zu einer neuen Basis aus kurzen Vektoren.
+   We apply LLL, with l computed already in a particular basis.
+   Wir wendn lll in der Weise an, dasz l schon bezueglich einer bestimmten
+   Basis ausgerechnet ist. The returned matrix array is the transformation
+   matrix from to the new basis. 
 
-   ACHTUNG: Diese Funktion arbeitet nur, wenn l aus nicht zu groszen Zahlen
-   besteht. Wir laufen an der Kurve entlang und hoffen, dass die Vektoren, die
-   bei letzten Fliese kurz waren, jetzt nicht sehr lang sind. */
+   WARNING: This function works only if l consists of not too large numbers.
+   We step along the curve and hope that the vectors from the last tile that
+   were short, are now not very long. */
 inline void lll(double l[3][3], long vec[3][3])
 {
     long i, k;
@@ -526,7 +524,7 @@ inline void lll(double l[3][3], long vec[3][3])
     long q, tmp;
     double muc, Bc, t, tm;
 
-    /* Standardbasis. Der erste Kandidat fuer die Transformationsmatrix. */
+    /* Standard basis. Initial guess for the transformation matrix. */
     vec[0][0] = 1;
     vec[0][1] = 0;
     vec[0][2] = 0;
@@ -563,7 +561,7 @@ inline void lll(double l[3][3], long vec[3][3])
     }
 }
 
-#define lf_neu(lf, l, e)                                                       \
+#define lf_new(lf, l, e)                                                       \
     do                                                                         \
     {                                                                          \
         /* long  t1, t2;                                                       \
@@ -587,11 +585,11 @@ inline void lll(double l[3][3], long vec[3][3])
 
 /******************************************************************************
  *
- * Der Code fuer die Suche nach Gitterpunkten in der Pyramide.
+ * The code for finding grid points in the pyramid.
  *
  *****************************************************************************/
 
-/* res = m * v, 3x3-Matrix mal Spaltenvektor. */
+/* res = m * v, 3x3-Matrix times column-vector. */
 #define MMUL(res, m, v)                                                        \
     do                                                                         \
     {                                                                          \
@@ -605,21 +603,21 @@ inline void lll(double l[3][3], long vec[3][3])
         res[2] = m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2];             \
     } while (0)
 
-/* Berechne die vier Ecken der Pyramide. */
-inline void pyr_ecken(double pt1[3], double pt2[3], double pt3[3],
+/* Compute the four corners of the pyramid. */
+inline void pyr_corners(double pt1[3], double pt2[3], double pt3[3],
                       double pt4[3], double lf[3][3])
 {
     long i, j;
     double det_inv, adj[3][3], inv[3][3];
 
-    /* Die Ecken sind gegeben durch (l1, l2, l3) (pti) = vi.
-       Wichtig: v1, ..., v4 sind in der Reihenfolge des Umlaufs gelistet. */
+    /* The corners are given by (l1, l2, l3) (pti) = vi.
+       Important: v1, ..., v4 are listed in order of circulation. */
     double v1[3] = {1.0, 1.0, 1.0};
     double v2[3] = {1.0, -1.0, 1.0};
     double v3[3] = {1.0, -1.0, -1.0};
     /* double      v4[3] = {1.0,  1.0, -1.0}; */
 
-    /* Inverse Matrix bis auf Skalierung. */
+    /* Inverse Matrix (unscaled). */
     adj[0][0] = lf[1][1] * lf[2][2] - lf[1][2] * lf[2][1];
     adj[0][1] = -(lf[0][1] * lf[2][2] - lf[0][2] * lf[2][1]);
     adj[0][2] = lf[0][1] * lf[1][2] - lf[0][2] * lf[1][1];
@@ -632,7 +630,7 @@ inline void pyr_ecken(double pt1[3], double pt2[3], double pt3[3],
     adj[2][1] = -(lf[0][0] * lf[2][1] - lf[0][1] * lf[2][0]);
     adj[2][2] = lf[0][0] * lf[1][1] - lf[0][1] * lf[1][0];
 
-    /* Determinante */
+    /* Determinant */
     det_inv = 1.0 / (lf[0][0] * adj[0][0] + lf[0][1] * adj[1][0] +
                      lf[0][2] * adj[2][0]);
     /* sprintf (output, "det_inv = %.15f\n", det_inv); out (); */
@@ -649,17 +647,17 @@ inline void pyr_ecken(double pt1[3], double pt2[3], double pt3[3],
     pt4[1] = pt1[1] + pt3[1] - pt2[1];
     pt4[2] = pt1[2] + pt3[2] - pt2[2];
 
-    /* sprintf (output, "Ecken:\n"); out ();
+    /* sprintf (output, "Corners:\n"); out ();
     sprintf (output, "pt1 = (%f, %f, %f)\n", pt1[0], pt1[1], pt1[2]); out ();
     sprintf (output, "pt2 = (%f, %f, %f)\n", pt2[0], pt2[1], pt2[2]); out ();
     sprintf (output, "pt3 = (%f, %f, %f)\n", pt3[0], pt3[1], pt3[2]); out ();
     sprintf (output, "pt4 = (%f, %f, %f)\n", pt4[0], pt4[1], pt4[2]); out (); */
 }
 
-/* z laeuft in der auszersten Schleife.
-   Brauchen also Maximum und Minimum der z-Koordinaten der 5 Ecken
-   der Pyramide. */
-inline void z_schranken(long *z_anf, long *z_end, double *p1, double *p2,
+/* The outermost loop runs over z.
+   So need the maximum and minimum of the z-coordinates of the
+   5 corners of the pyramid. */
+inline void z_bounds(long *z_start, long *z_end, double *p1, double *p2,
                         double *p3, double *p4)
 {
     double tmp1, tmp2;
@@ -667,109 +665,109 @@ inline void z_schranken(long *z_anf, long *z_end, double *p1, double *p2,
     tmp1 = MIN(MIN(MIN(p1[2], p2[2]), MIN(p3[2], p4[2])), 0.0);
     tmp2 = MAX(MAX(MAX(p1[2], p2[2]), MAX(p3[2], p4[2])), 0.0);
 
-    *z_anf = lround(tmp1 + 0.5); /* Aufrunden. */
-    *z_end = lround(tmp2 - 0.5); /* Abrunden. */
-    /* Ganze Zahlen werden eventuell falsch gerundet.
-    Dies ist aber kein Bug, weil wir ohnehin nur die Punkte im Innern der
-    Pyramide
-    brauchen. */
+    *z_start = lround(tmp1 + 0.5); /* Round up. */
+    *z_end = lround(tmp2 - 0.5); /* Round down. */
+    /* Whole numbers may be rounded incorrectly.
+    This is not a bug, however, since we only need the points inside
+    the pyramid. */
 
-    /* sprintf (output, "z-Schranken: [%ld, %ld]\n", *z_anf, *z_end); out (); */
+    /* sprintf (output, "z-bounds: [%ld, %ld]\n", *z_start, *z_end); out (); */
 }
 
-/* Eine Kante dargestellt als array der Laenge 6.
-   y = kante[2]*z + kante[3] und
-   x = kante[4]*z + kante[5]
-   fuer kante[0] <= z <= kante[1]. */
-inline void kante(double *kante, double *anf, double *end)
+/* One edge is represntated as an array of 6 values.
+   y = edge[2]*z + edge[3] and
+   x = edge[4]*z + edge[5]
+   for edge[0] <= z <= edge[1]. */
+inline void edge(double *edge, double *start, double *end)
 {
     double dz_inv;
 
-    dz_inv = 1 / (anf[2] - end[2]);
+    dz_inv = 1 / (start[2] - end[2]);
 
-    if (anf[2] < end[2])
+    if (start[2] < end[2])
     {
-        kante[0] = anf[2];
-        kante[1] = end[2];
+        edge[0] = start[2];
+        edge[1] = end[2];
     }
     else
     {
-        kante[0] = end[2];
-        kante[1] = anf[2];
+        edge[0] = end[2];
+        edge[1] = start[2];
     }
-    /* Ist dies eine Division durch 0, dann wird sowieso kante[0] = kante[1]
-    (und dies ist hoffentlich keine ganze Zahl). */
-    kante[2] = (anf[1] - end[1]) * dz_inv; /* dy/dz */
-    kante[3] = anf[1] - kante[2] * anf[2];
+    /* If this causes a division by 0, then edge[0] = edge[1] anyway
+    (and this is hopefully not an integer). */
+    edge[2] = (start[1] - end[1]) * dz_inv; /* dy/dz */
+    edge[3] = start[1] - edge[2] * start[2];
 
-    kante[4] = (anf[0] - end[0]) * dz_inv; /* dx/dz */
-    kante[5] = anf[0] - kante[4] * anf[2];
+    edge[4] = (start[0] - end[0]) * dz_inv; /* dx/dz */
+    edge[5] = start[0] - edge[4] * start[2];
 
-    /* sprintf (output, "Kante: y = %f*z + %f, x = %f*z + %f fuer %f <= z <=
+    /* sprintf (output, "Edge: y = %f*z + %f, x = %f*z + %f for %f <= z <=
     %f\n",
-                  kante[2], kante[3], kante[4], kante[5], kante[0], kante[1]);
+                  edge[2], edge[3], edge[4], edge[5], edge[0], edge[1]);
     out (); */
 }
 
-/* Berechne die acht Kanten der Pyramide. */
-inline void pyr_kanten(double kant[8][6], double *p1, double *p2, double *p3,
+/* Compute the eight edges of the pyramid */
+inline void pyr_edges(double edges[8][6], double *p1, double *p2, double *p3,
                        double *p4)
 {
     double s[3] = {0.0, 0.0, 0.0};
 
-    kante(kant[0], s, p1);
-    kante(kant[1], s, p2);
-    kante(kant[2], s, p3);
-    kante(kant[3], s, p4);
-    kante(kant[4], p1, p2);
-    kante(kant[5], p2, p3);
-    kante(kant[6], p3, p4);
-    kante(kant[7], p4, p1);
+    edge(edges[0], s, p1);
+    edge(edges[1], s, p2);
+    edge(edges[2], s, p3);
+    edge(edges[3], s, p4);
+    edge(edges[4], p1, p2);
+    edge(edges[5], p2, p3);
+    edge(edges[6], p3, p4);
+    edge(edges[7], p4, p1);
 }
 
-/* x und y laufen in den beiden inneren Schleifen.
-   Wir schneiden also die Pyramide mit der z = ... - Ebene und haben ein
-   Polygon. Wir brauchen das Maximum und das Minimum der x- bzw. y-Koordinaten
-   der Ecken dieses Polygons.
-   Ecken entstehen durch den Schnitt der Ebene mit den Kanten. */
-inline void x_und_y_schranken(long *x_anf, long *x_end, long *y_anf,
-                              long *y_end, double kant[8][6], long z)
+/* The two inner loops run over x und y.
+   So we cut the pyramid with the z = ... plane and have a polygon.
+   Polygon. We need the maximum and minimum of the x and y coordinates
+   of this polygon.
+   Corners are created by the intersection of the plane with
+   the edges */
+inline void x_and_y_bounds(long *x_start, long *x_end, long *y_start,
+                              long *y_end, double edge[8][6], long z)
 {
     int i;
     double *kan, k;
-    double xanf, xend, yanf, yend;
+    double xstart, xend, ystart, yend;
 
-    xanf = LONG_MAX;
+    xstart = LONG_MAX;
     xend = LONG_MIN;
-    yanf = LONG_MAX;
+    ystart = LONG_MAX;
     yend = LONG_MIN;
 
-    /* Schleife durch die acht Kanten. */
+    /* Loop over the eight edges */
     for (i = 0; i < 8; i++)
     {
-        kan = kant[i]; /* Aktuelle Kante. */
-        /* Treffen wir diese Kante ueberhaupt? */
+        kan = edge[i]; /* this edge */
+        /* Do we intersect this edge at all? */
         if ((kan[0] <= z) && (z <= kan[1]))
         {
             k = kan[2] * z + kan[3];
-            yanf = MIN(yanf, k);
+            ystart = MIN(ystart, k);
             yend = MAX(yend, k);
             k = kan[4] * z + kan[5];
-            xanf = MIN(xanf, k);
+            xstart = MIN(xstart, k);
             xend = MAX(xend, k);
         }
     }
-    *y_anf = lround(yanf + 0.5); /* Aufrunden. */
-    *y_end = lround(yend - 0.5); /* Abrunden. */
-    *x_anf = lround(xanf + 0.5); /* Aufrunden. */
-    *x_end = lround(xend - 0.5); /* Abrunden. */
+    *y_start = lround(ystart + 0.5); /* Round up. */
+    *y_end = lround(yend - 0.5); /* Round down. */
+    *x_start = lround(xstart + 0.5); /* Round up. */
+    *x_end = lround(xend - 0.5); /* Round down. */
 
-    /* sprintf (output, "x_y-Schranken fuer z = %ld: [%ld, %ld] x [%ld, %ld]\n",
-                                            z, *x_anf, *x_end, *y_anf, *y_end);
+    /* sprintf (output, "x_y-bounds for z = %ld: [%ld, %ld] x [%ld, %ld]\n",
+                                            z, *x_start, *x_end, *y_start, *y_end);
     out (); */
 }
 
-/* Ausgabe der Loesung. */
+/* Output the solutions. */
 void post_proc(long vec_out0, long vec_out1, long vec_out2, long f0)
 {
     /* double  quot, x0, x1; */
@@ -780,25 +778,24 @@ void post_proc(long vec_out0, long vec_out1, long vec_out2, long f0)
     /* x0 = mpx_get_d (x_0);
     x0 -= half_step;
     x1 = x0 + 2 * half_step; */
-    /* sprintf (output, "Intervall [%.18f,%.18f]\n\n", x0, x1); out (); */
+    /* sprintf (output, "Interval [%.18f,%.18f]\n\n", x0, x1); out (); */
 
     /* if ((x0 < quot) && (x1 > quot)) */
     {
-        sprintf(output, "(%ld, %ld, %ld) Loesung fuer k = %ld.\n", vec_out0,
+        sprintf(output, "(%ld, %ld, %ld) Solution for k = %ld.\n", vec_out0,
                 vec_out1, vec_out2, f0);
         out();
         sprintf(output, "\n");
         out();
-        /* sprintf (output, "Loesung gefunden.\n"); out (); */
+        /* sprintf (output, "Solution found.\n"); out (); */
         /* exit (0); */
     }
 }
 
-/* Was ist v2**3 - v0**3 - v1**3 bei den aktuellen Werten von z, y und x?
-   Alle Rechnungen modulo 2**64.
-   Ausgabe der Tripel (v0, v1, v2), bei denen v0**3 + v1**3 - v2**3 wirklich
-   gleich \pm3 ist. */
-inline ulong ein_funktionswert(long x, long v00, long v01, long v02,
+/* What is v2**3 - v0**3 - v1**3 for the current values of z, y and x?
+   All computation is modulo 2**64.
+   Output triples (v0, v1, v2), where v0**3 + v1**3 - v2**3 equals \pm 3(???). */
+inline ulong evaluate_function(long x, long v00, long v01, long v02,
                                long vec_h0, long vec_h1, long vec_h2)
 {
     long vec_out0, vec_out1, vec_out2;
@@ -806,78 +803,75 @@ inline ulong ein_funktionswert(long x, long v00, long v01, long v02,
 
     /* sprintf (output, "x = %ld.\n", x); out (); */
 
-    vec_out0 = x * v00 + vec_h0; /* Waere hier Rechnung in ulong logischer? */
-    vec_out1 = x * v01 + vec_h1; /* Haben sowieso keinen Overflow. */
+    vec_out0 = x * v00 + vec_h0; /* Use ulong arithmetic here? */
+    vec_out1 = x * v01 + vec_h1; /* Don't have any overflows, anyway. */
     vec_out2 = x * v02 + vec_h2;
 
-    /* Rechnung modulo 2**64. Deswegen Cast nach unsigned. */
+    /* Compute modulo 2**64. Therefore, cast to unsigned. */
     f0 = ((ulong)vec_out2) * ((ulong)vec_out2) * ((ulong)vec_out2) -
          ((ulong)vec_out0) * ((ulong)vec_out0) * ((ulong)vec_out0) -
          ((ulong)vec_out1) * ((ulong)vec_out1) * ((ulong)vec_out1);
 
-    /* Rechnen in kleine_vect nur den Fall z >= 0.
-    Deshalb brauchen wir an dieser Stelle plus und minus.
-    Ausgabe natuerlich als signed long ints. */
+    /* small_vect() computes only the case z >= 0.
+    Which is why we need both plus and minus at this point.
+    Output, of course, as signed long ints. */
     if ((f0 < MAX_K) || (-f0 < MAX_K))
         if (f0 != 0)
-            post_proc(vec_out0, vec_out1, vec_out2, f0); /* Ausgabe */
+            post_proc(vec_out0, vec_out1, vec_out2, f0); /* Output */
 
     return (f0);
 }
 
-#define XY_SCHLEIFE                                                            \
+#define XY_LOOP                                                                \
     {                                                                          \
-        for (y = y_anf; y <= y_end; y++)                                       \
+        for (y = y_start; y <= y_end; y++)                                     \
         {                                                                      \
-            /* sprintf (output, "Rechne y = %ld.\n", y); out (); */            \
+            /* sprintf (output, "Compute y = %ld.\n", y); out (); */           \
             vec_h0 = y * v[1][0] + z * v[2][0];                                \
             vec_h1 = y * v[1][1] + z * v[2][1];                                \
             vec_h2 = y * v[1][2] + z * v[2][2];                                \
                                                                                \
-            x = x_anf;                                                         \
-            /* Dieser Funktionsaufruf verursacht eine Ausgabe, falls f0 oder   \
-            -f0                                                                \
-            unterhalb der MAX_K liegt. */                                      \
-            f0 = ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
-            anz++;                                                             \
+            x = x_start;                                                       \
+            /* These function calls causes output if f0 or -f0 is              \
+               less than MAX_K. */                                             \
+            f0 = evaluate_function(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
+            ans++;                                                             \
                                                                                \
             x++;                                                               \
-            f1 = ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
-            anz++;                                                             \
+            f1 = evaluate_function(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
+            ans++;                                                             \
                                                                                \
             x++;                                                               \
-            f2 = ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
-            anz++;                                                             \
+            f2 = evaluate_function(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
+            ans++;                                                             \
                                                                                \
             x++;                                                               \
                                                                                \
-            /* Differenzenschema.*/                                            \
+            /* Difference scheme.*/                                            \
             d1 = f1 - f0;                                                      \
             d = f2 - f1;                                                       \
             dd = d - d1;                                                       \
             f = f2;                                                            \
-            dd += ddd; /* dd einen Schritt im Vorlauf. */                      \
+            dd += ddd; /* increment dd one step. */                            \
             for (; x <= x_end; x++)                                            \
             {                                                                  \
                 d += dd;                                                       \
                 dd += ddd;                                                     \
                 f += d;                                                        \
-                /* if (f != ein_funktionswert (x, v00, v01, v02, vec_h0,       \
+                /* if (f != evaluate_function (x, v00, v01, v02, vec_h0,       \
                 vec_h1, vec_h2)) {                                             \
                  sprintf (output, "%lu %lu\n", f,                              \
-                             ein_funktionswert (x, v00, v01, v02, vec_h0,      \
+                             evaluate_function (x, v00, v01, v02, vec_h0,      \
                 vec_h1, vec_h2));                                              \
                  out ();                                                       \
-                 sprintf (output, "Bug im Differenzenschema!\n"); out ();      \
+                 sprintf (output, "Bug in Difference scheme!\n"); out ();      \
                  exit (0);                                                     \
                 } */                                                           \
-                anz++;                                                         \
+                ans++;                                                         \
                 if ((f < MAX_K) || (-f < MAX_K))                               \
-                    /* Dient nur der Ausgabe. Rechnen den Funktionswert        \
-                    ueberfluessigerweise                                       \
-                    nochmals aus. Ist schneller als eine extra Funktion        \
-                    aufzurufen. */                                             \
-                    ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1,        \
+                    /* Only for output, compute the function value again.      \
+                    Is faster than making an extra functioncall. */            \
+                    evaluate_function(x, v00, v01, v02, vec_h0, vec_h1,        \
                                       vec_h2);                                 \
             }                                                                  \
         }                                                                      \
@@ -885,24 +879,23 @@ inline ulong ein_funktionswert(long x, long v00, long v01, long v02,
     while (0)                                                                  \
         ;
 
-/* Suche nach ganzen Vektoren mit
+/* Search for whole vectors
         0 < l1 < 1, |l2| < l1 und |l3| < l1.
-   Alle Rechnungen finden bezueglich der reduzierten Basis v statt.
-   Sollte (vec[0], vec[1], vec[2]) aus durch 3 teilbaren Zahlen bestehen,
-   rufen wir post_proc gar nicht erst auf.
-   (Wegen vec[0]**3 + vec[1]**3 + vec[2]**3 = 0 (mod 3) sind entweder alle
-   drei Komponenten durch 3 teilbar oder gar keine.) */
-inline long kleine_vect(double lf[3][3], long v[3][3])
+   All calculations take place with respect to the reduced basis v.
+   If (vec[0], vec[1], vec[2]) are divisible by 3, we do not call post_proc().
+   (Because vec[0]**3 + vec[1]**3 + vec[2]**3 = 0 (mod 3) either all three
+   components are divisible by 3 or none at all.) */
+inline long small_vect(double lf[3][3], long v[3][3])
 {
     long x, y, z;
-    long x_anf, x_end;
-    long y_anf, y_end;
-    long z_anf, z_end;
+    long x_start, x_end;
+    long y_start, y_end;
+    long z_start, z_end;
     long vec_h0, vec_h1, vec_h2;
-    long anz;
+    long ans;
     long v00, v01, v02;
     double p1[3], p2[3], p3[3], p4[3];
-    double kant[8][6];
+    double edge[8][6];
     ulong f, f0, f1, f2;
     ulong d, dd, ddd, d1;
 
@@ -912,55 +905,55 @@ inline long kleine_vect(double lf[3][3], long v[3][3])
               v[1][0], v[1][1], v[1][2],
               v[2][0], v[2][1], v[2][2]);
     out ();
-    sprintf (output, "Linearformen auf dem ersten Vektor: %f %f %f\n",
+    sprintf (output, "Linear forms of the first vector: %f %f %f\n",
                                                   lf[0][0], lf[1][0], lf[2][0]);
     out (); */
 
-    /* Berechne die Ecken der Pyramide. Die Spitze ist der Nullpunkt. */
-    pyr_ecken(p1, p2, p3, p4, lf);
-    /* Berechne die Schranken fuer z. */
-    z_schranken(&z_anf, &z_end, p1, p2, p3, p4);
+    /* Compute the corners of the pyramid. The peak is the origin. */
+    pyr_corners(p1, p2, p3, p4, lf);
+    /* Compute the bound for z. */
+    z_bounds(&z_start, &z_end, p1, p2, p3, p4);
 
-    /* Berechne die acht Kanten der Pyramide. */
-    pyr_kanten(kant, p1, p2, p3, p4);
+    /* Compute the eight edges of the pyramid. */
+    pyr_edges(edge, p1, p2, p3, p4);
 
-    /* Dreifachloop durch die Pyramide. */
-    anz = 0;
+    /* Triple-nested loop through the pyramid. */
+    ans = 0;
     v00 = v[0][0];
     v01 = v[0][1];
     v02 = v[0][2];
-    /* Differenzenschema, erster Teil.
-    ddd ist unabhaengig von z, ueber die gesamte Fliese konstant. */
+    /* Difference scheme, first part.
+    ddd is independnt of z, constant over the whole tile. */
     ddd = ((ulong)6) * (((ulong)v02) * ((ulong)v02) * ((ulong)v02) -
                         ((ulong)v00) * ((ulong)v00) * ((ulong)v00) -
                         ((ulong)v01) * ((ulong)v01) * ((ulong)v01));
 
-    for (z = z_anf; z <= z_end; z++)
+    for (z = z_start; z <= z_end; z++)
     {
-        /* Berechne die Schranken fuer x und y. */
-        x_und_y_schranken(&x_anf, &x_end, &y_anf, &y_end, kant, z);
-        XY_SCHLEIFE;
+        /* Compute bounds for x and y. */
+        x_and_y_bounds(&x_start, &x_end, &y_start, &y_end, edge, z);
+        XY_LOOP;
     }
-    return (anz);
+    return (ans);
 }
 
-/* Init. Die aeuszere Schleife. */
-void rechne_intervall(mpx_t x_0_anf, mpx_t x_0_ende)
+/* Initialise the outer loop. */
+void compute_interval(mpx_t x_0_start, mpx_t x_0_end)
 {
     mpx_t step;
     mpx_t y_0;
     double lf[3][3], ln[3][3];
     long e[3][3], v[3][3];
-    long zaehler, anz, err;
+    long counter, ans, err;
 
-    x_0[0] = x_0_ende[0];
-    x_0[1] = x_0_ende[1];
-    /* Laufen rueckwaerts von x_0_ende nach x_0_anf. */
+    x_0[0] = x_0_end[0];
+    x_0[1] = x_0_end[1];
+    /* Run backwards from x_0_end to x_0_start. */
 
     compute_tile_params(step);
 
-    /* Erster Schleifendurchlauf. Hier rechnen wir LLL mit viel Precision.
-       Auszerdem wird y_0 initialisiert. */
+    /* First loop-pass. Here we compute LLL with high precision.
+       y_0 is also initialised. */
     init(v, y_0, x_0, half_step, tile_offset, half_tilewidth, UPPER_BOUND);
     y_inv_init(y_0);
     y_diff[0] = 0;
@@ -968,40 +961,39 @@ void rechne_intervall(mpx_t x_0_anf, mpx_t x_0_ende)
     y_inv_diff[0] = 0;
     y_inv_diff[1] = 0;
     /* y_diff = y_inv_diff = 0. */
-    sprintf(output, "Init fertig.\n");
+    sprintf(output, "Initialisation complete.\n");
     out();
 
-    /* Scheife. Hier reicht fuer fast alles die Genauigkeit von double. */
-    zaehler = FLIESE_NEU;
-    tiles = -FLIESE_NEU;
+    /* Loop. Here almost everything is done in double precision. */
+    counter = NEW_TILES;
+    tiles = -NEW_TILES;
     err = 0;
-    /* while (x_0 >= x_0_anf) ... . */
-    while ((x_0[1] > x_0_anf[1]) ||
-           ((x_0[1] == x_0_anf[1]) && (x_0[0] >= x_0_anf[0])))
+    /* while (x_0 >= x_0_start) ... . */
+    while ((x_0[1] > x_0_start[1]) ||
+           ((x_0[1] == x_0_start[1]) && (x_0[0] >= x_0_start[0])))
     {
         /* mpf_set_mpx (tmp1, x_0);
         gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
 
         compute_y_value(y_0);
-        /* Beim ersten Mal ist y_diff = 0 => y_0 wird richtig ausgerechnet. */
+        /* The first time y_diff = 0 => y_0 is computed correctly. */
         /* mpf_set_mpx (tmp1, y_0);
         gmp_sprintf (output, "y_0 = %.*Ff.\n\n", 40, tmp1); out (); */
-        berechne_y_strich(y_0);
-        /* Beim ersten Mal ist y_inv_diff = 0 => y'(x_0) wird richtig
-         * ausgerechnet. */
+        compute_y_deriv(y_0);
+        /* The first time y_inv_diff = 0 => y'(x_0) is computed correctly. */
         /* mpf_set_mpx (tmp1, Ax);
         gmp_sprintf (output, "A = %.*Ff.\n\n", 40, tmp1); out (); */
 
-        if (zaehler == FLIESE_NEU)
+        if (counter == NEW_TILES)
         {
-            zaehler = 0;
-            tiles += FLIESE_NEU;
+            counter = 0;
+            tiles += NEW_TILES;
             compute_tile_params(step);
             y_inv_init(y_0);
             y_diff_init(y_0, step);
         }
 
-        /* Letztes v war nicht korrekt wegen Overflow. */
+        /* Last v was not correct due to overflow. */
         if (err > 0)
         {
             init(v, y_0, x_0, half_step, tile_offset, half_tilewidth,
@@ -1015,54 +1007,53 @@ void rechne_intervall(mpx_t x_0_anf, mpx_t x_0_ende)
 
         lll(lf, e);
         err = matrix_prod(v, e,
-                          v); /* v ist auf jeden Fall richtig modulo 2**64. */
+                          v); /* v is definitely modulo 2**64. */
 
-        lf_neu(ln, lf, e);
-        anz = kleine_vect(ln, v);
-        /* sprintf (output, "Finden %ld Gitterpunkte.\n", anz); out (); */
+        lf_new(ln, lf, e);
+        ans = small_vect(ln, v);
+        /* sprintf (output, "Find %ld Gridpoints.\n", ans); out (); */
 
-        /* Fliesen gehen von x_0 nach rechts und links. */
+        /* Tile goes left and right from x_0. */
         mpx_sub(x_0, x_0, step);
-        zaehler++;
+        counter++;
     }
 
-    sprintf(output, "Insgesamt %ld Fliesen behandelt.\n", tiles + zaehler);
+    sprintf(output, "%ld Tiles computed total.\n", tiles + counter);
     out();
 }
 
-/* Wir wollen mit etwas wie
+/* Run with something like:
       elkies_allg 0.4 0.000001
-   starten.
 
-   Dabei ist 0.4 der Anfangswert.
-   0.000001 ist die Intervalllaenge, die der Prozessor schaffen soll. */
+   Where 0.4 is the initial value.
+   0.000001 is the interval length that should be processed. */
 int main(int argc, char *argv[])
 {
-    mpx_t diff, x_0_anf, x_0_ende;
+    mpx_t diff, x_0_start, x_0_end;
 
     mpf_set_default_prec(128);
     mpf_init(tmp1);
     mpf_init(tmp2);
 
     mpf_set_str(tmp1, argv[1], 10);
-    mpx_set_mpf(x_0_anf, tmp1);
+    mpx_set_mpf(x_0_start, tmp1);
     mpf_set_str(tmp2, argv[2], 10);
     mpx_set_mpf(diff, tmp2);
 
     row = 1;
-    mpx_add(x_0_ende, x_0_anf, diff);
+    mpx_add(x_0_end, x_0_start, diff);
 
-    /* Name der Ausgabedatei */
-    mpf_set_mpx(tmp1, x_0_anf);
-    mpf_set_mpx(tmp2, x_0_ende);
+    mpf_set_mpx(tmp1, x_0_start);
+    mpf_set_mpx(tmp2, x_0_end);
+    /* Name of the output file */
     gmp_sprintf(file, "liste_allg_%.*Ff_%.*Ff.txt", 8, tmp1, 8, tmp2);
 
-    /* Erste Ausgabe */
-    gmp_sprintf(output, "Starte Rechnung von %.*Ff bis %.*Ff.\n", 15, tmp1, 15,
+    /* First output */
+    gmp_sprintf(output, "Start computing from %.*Ff to %.*Ff.\n", 15, tmp1, 15,
                 tmp2);
     out();
 
-    rechne_intervall(x_0_anf, x_0_ende);
+    compute_interval(x_0_start, x_0_end);
 
     mpf_clear(tmp1);
     mpf_clear(tmp2);
