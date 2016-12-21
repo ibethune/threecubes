@@ -23,31 +23,29 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 Address of the authors
 
-	A.-S. Elsenhans/ J. Jahnel
-	Math. Institut der Universitaet
-	Bunsenstrasze 3--5
-	D-37073 Goettingen
+        A.-S. Elsenhans/ J. Jahnel
+        Math. Institut der Universitaet
+        Bunsenstrasze 3--5
+        D-37073 Goettingen
         Germany
 
 WWW     http://www.uni-math.gwdg.de/jahnel
 
 *****************************************************************/
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <gmp.h>
+#include <math.h>
+#include "festkomma.h"
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<limits.h>
-#include<gmp.h>
-#include<math.h>
-#include"festkomma.h"
-
-#define        UPPER_BOUND     1.0e14
-#define        LOWER_BOUND     1.0e11
+#define UPPER_BOUND 1.0e14
+#define LOWER_BOUND 1.0e11
 
 /* Triples with |x**3 + y**3 - z**3| < MAX_K are allowed. */
-#define        MAX_K  1000
-
+#define MAX_K 1000
 
 /* The global variables half_step, half_tilewidth und
    tile_offset are calculated in compute_tile_params().
@@ -66,19 +64,18 @@ WWW     http://www.uni-math.gwdg.de/jahnel
    The area of the tile is thus 1.001 * y''(x) * half_step**3.
 
    This value is set as 1.001 * (FACTOR/UPPER_BOUND)**3.
-   Thus FACTOR, UPPER_BOUND and the current second derivative control the 
+   Thus FACTOR, UPPER_BOUND and the current second derivative control the
    half_step und half_tilewidth calculation. */
-#define        FLIESE_NEU        1000000
-#define        FACTOR            5.5
-double  half_step, half_tilewidth;
+#define FLIESE_NEU 1000000
+#define FACTOR 5.5
+double half_step, half_tilewidth;
 mpx_t x_0, tile_offset, Ax;
 mpx_t y_diff, y_inv, y_inv_diff;
 char output[1000], file[100];
 long row;
 
-
 /* Counter of the total number of processed tiles. */
-long                                    tiles;
+long tiles;
 
 /* These mpf variables should be locals, mainly in the
    functions compute_y_value and compute_three_linearf or
@@ -86,104 +83,112 @@ long                                    tiles;
    The code runs faster with global variables. */
 mpf_t tmp1, tmp2;
 
-
 /* Just a prototype */
-void init (long v[3][3], mpx_t y_0_type, mpx_t x_0_type,
-  double half_step, mpx_t tile_offset,
-  double half_tilewidth, double upper_bound);
+void init(long v[3][3], mpx_t y_0_type, mpx_t x_0_type, double half_step,
+          mpx_t tile_offset, double half_tilewidth, double upper_bound);
 
-void out () {
- FILE *fp;
+void out()
+{
+    FILE *fp;
 
- fp = fopen (file, "a");
- fprintf (fp, "%6ld \t ", row);
- row++;
- fprintf (fp, output);
- fclose (fp);
+    fp = fopen(file, "a");
+    fprintf(fp, "%6ld \t ", row);
+    row++;
+    fprintf(fp, output);
+    fclose(fp);
 }
 
 /* pr := m1 * m2. Product of two 3x3 matrices with integer entries.
    We compute in long integer and watch for overflows \pm 2**63.
    pr = m1 or pr = m2 are allowed. */
-inline long matrix_prod (long pr[3][3],
-                         long m1[3][3], long m2[3][3]) {
- long               i, j;
- long         prod[3][3];
- long  prodh, argh, argl;
- long                err;
+inline long matrix_prod(long pr[3][3], long m1[3][3], long m2[3][3])
+{
+    long i, j;
+    long prod[3][3];
+    long prodh, argh, argl;
+    long err;
 
- err = 0;
- for (i = 0; i < 3; i++) {
-  for (j = 0; j < 3; j++) {
-   smul_ppmm (prodh, prod[i][j], m1[i][0], m2[0][j]);
-   smul_ppmm (argh, argl, m1[i][1], m2[1][j]);
-   addf_ssaaaa (prodh, prod[i][j], prodh, prod[i][j], argh, argl);
-   smul_ppmm (argh, argl, m1[i][2], m2[2][j]);
-   addf_ssaaaa (prodh, prod[i][j], prodh, prod[i][j], argh, argl);
-   if (((prod[i][j] >= 0) && (prodh != 0))
-     || ((prod[i][j] < 0) && (prodh != -1))) {
-    /* sprintf (output, "Overflow during matrix product. "); out ();
-       sprintf (output, " prod[i][j] = %ld, prodh = %ld.\n",
-                                              prod[i][j], prodh); out ();
-    sprintf (output, "m1 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld %ld]\n",
-         m1[0][0], m1[0][1], m1[0][2],
-         m1[1][0], m1[1][1], m1[1][2],
-         m1[2][0], m1[2][1], m1[2][2]); out ();
-    sprintf (output, "m2 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld %ld]\n",
-         m2[0][0], m2[0][1], m2[0][2],
-         m2[1][0], m2[1][1], m2[1][2],
-         m2[2][0], m2[2][1], m2[2][2]); out (); */
-    err = 1; /* Overflow! */
-   }
-  }
- }
- /* Copyback - needed for the case that pr is aliased to m1 or m2 */
- for (i = 0; i < 3; i++) {
-  for (j = 0; j < 3; j++) {
-   pr[i][j] = prod[i][j];
-  }
- }
- return (err);
+    err = 0;
+    for (i = 0; i < 3; i++)
+    {
+        for (j = 0; j < 3; j++)
+        {
+            smul_ppmm(prodh, prod[i][j], m1[i][0], m2[0][j]);
+            smul_ppmm(argh, argl, m1[i][1], m2[1][j]);
+            addf_ssaaaa(prodh, prod[i][j], prodh, prod[i][j], argh, argl);
+            smul_ppmm(argh, argl, m1[i][2], m2[2][j]);
+            addf_ssaaaa(prodh, prod[i][j], prodh, prod[i][j], argh, argl);
+            if (((prod[i][j] >= 0) && (prodh != 0)) ||
+                ((prod[i][j] < 0) && (prodh != -1)))
+            {
+                /* sprintf (output, "Overflow during matrix product. "); out ();
+                   sprintf (output, " prod[i][j] = %ld, prodh = %ld.\n",
+                                                          prod[i][j], prodh);
+                out ();
+                sprintf (output, "m1 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld
+                %ld]\n",
+                     m1[0][0], m1[0][1], m1[0][2],
+                     m1[1][0], m1[1][1], m1[1][2],
+                     m1[2][0], m1[2][1], m1[2][2]); out ();
+                sprintf (output, "m2 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld
+                %ld]\n",
+                     m2[0][0], m2[0][1], m2[0][2],
+                     m2[1][0], m2[1][1], m2[1][2],
+                     m2[2][0], m2[2][1], m2[2][2]); out (); */
+                err = 1; /* Overflow! */
+            }
+        }
+    }
+    /* Copyback - needed for the case that pr is aliased to m1 or m2 */
+    for (i = 0; i < 3; i++)
+    {
+        for (j = 0; j < 3; j++)
+        {
+            pr[i][j] = prod[i][j];
+        }
+    }
+    return (err);
 }
-
 
 /* Compute half_step and half_tilewidth at the current
    point x_0 \in [0,1]. */
-void compute_tile_params (mpx_t step) {
- double x, second_derivative, padding;
- long do_output;
+void compute_tile_params(mpx_t step)
+{
+    double x, second_derivative, padding;
+    long do_output;
 
- /* Output only every 100*FLIESE_NEU tiles. */
- do_output = tiles % (100 * FLIESE_NEU);
+    /* Output only every 100*FLIESE_NEU tiles. */
+    do_output = tiles % (100 * FLIESE_NEU);
 
- x = mpx_get_d (x_0);
+    x = mpx_get_d(x_0);
 
- if (do_output == 0) {
-  sprintf (output, "\n"); out ();
-  sprintf (output, "x_0 = %.15f.\n", x); out ();
- }
+    if (do_output == 0)
+    {
+        sprintf(output, "\n");
+        out();
+        sprintf(output, "x_0 = %.15f.\n", x);
+        out();
+    }
 
- second_derivative = 2*x / pow (1 - x*x*x, 5.0/3.0);
- half_step = pow (second_derivative, -1.0/3.0) * FACTOR / UPPER_BOUND;
+    second_derivative = 2 * x / pow(1 - x * x * x, 5.0 / 3.0);
+    half_step = pow(second_derivative, -1.0 / 3.0) * FACTOR / UPPER_BOUND;
 
- padding = MAX_K / (LOWER_BOUND * LOWER_BOUND * LOWER_BOUND);
- half_tilewidth =  1.001 * second_derivative *
-                   half_step*half_step / 4
-                   + padding;
-                     /* padding chosen so that solutions of 
-                        size >LOWER_BOUND are guaranteed. */
+    padding = MAX_K / (LOWER_BOUND * LOWER_BOUND * LOWER_BOUND);
+    half_tilewidth =
+        1.001 * second_derivative * half_step * half_step / 4 + padding;
+    /* padding chosen so that solutions of
+       size >LOWER_BOUND are guaranteed. */
 
- if (do_output == 0) {
-  sprintf (output, "half_step = %.9e, half_tilewidth = %.9e.\n",
-                               half_step, half_tilewidth);
-  out ();
- }
+    if (do_output == 0)
+    {
+        sprintf(output, "half_step = %.9e, half_tilewidth = %.9e.\n", half_step,
+                half_tilewidth);
+        out();
+    }
 
- mpx_set_d (step, 2 * half_step);
- mpx_set_d (tile_offset,
-                  second_derivative * half_step*half_step / 4);
+    mpx_set_d(step, 2 * half_step);
+    mpx_set_d(tile_offset, second_derivative * half_step * half_step / 4);
 }
-
 
 /***************************************************************************
  *
@@ -191,298 +196,313 @@ void compute_tile_params (mpx_t step) {
  *
  **************************************************************************/
 
-
 /* Wird einmal pro FLIESE_NEU Fliesen aufgerufen.
    Berechnet 1/y_0 (- 1) aufwendig und exakt. */
-void y_inv_init (mpx_t y_0) {
- /* Initialisierung von y_inv. */
- mpf_set_ui (tmp1, 1);
- mpf_set_mpx (tmp2, y_0);
- mpf_div (tmp1, tmp1, tmp2);
- mpf_sub_ui (tmp1, tmp1, 1);
- mpx_set_mpf (y_inv, tmp1);
- /* gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
+void y_inv_init(mpx_t y_0)
+{
+    /* Initialisierung von y_inv. */
+    mpf_set_ui(tmp1, 1);
+    mpf_set_mpx(tmp2, y_0);
+    mpf_div(tmp1, tmp1, tmp2);
+    mpf_sub_ui(tmp1, tmp1, 1);
+    mpx_set_mpf(y_inv, tmp1);
+    /* gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
 }
-
 
 /* Wird einmal pro FLIESE_NEU Fliesen aufgerufen.
    Initialisiert y_diff als y'(x_0) * step.
    Berechnet y_inv_diff als y_diff / y_0**2. */
-void y_diff_init (mpx_t y_0, mpx_t step) {
- double  diff, y;
+void y_diff_init(mpx_t y_0, mpx_t step)
+{
+    double diff, y;
 
- /* Initialisierung von y_diff. */
- mpx_mul (y_diff, Ax, step);
- /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
- if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
-  mpx_add (y_diff, y_diff, step);
- /* mpf_set_mpx (tmp1, y_diff);
- gmp_sprintf (output, "y_diff = %.*Ff.\n\n", 40, tmp1); */
+    /* Initialisierung von y_diff. */
+    mpx_mul(y_diff, Ax, step);
+    /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
+    if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
+        mpx_add(y_diff, y_diff, step);
+    /* mpf_set_mpx (tmp1, y_diff);
+    gmp_sprintf (output, "y_diff = %.*Ff.\n\n", 40, tmp1); */
 
- /* Initialisierung von y_inv_diff. */
- y = mpx_get_d (y_0);
- diff = mpx_get_d (y_diff) / (y*y);
- mpx_set_d (y_inv_diff, diff);
- /* mpf_set_mpx (tmp1, y_inv_diff);
- gmp_sprintf (output, "y_inv_diff = %.*Ff.\n", 40, tmp1); */
+    /* Initialisierung von y_inv_diff. */
+    y = mpx_get_d(y_0);
+    diff = mpx_get_d(y_diff) / (y * y);
+    mpx_set_d(y_inv_diff, diff);
+    /* mpf_set_mpx (tmp1, y_inv_diff);
+    gmp_sprintf (output, "y_inv_diff = %.*Ff.\n", 40, tmp1); */
 }
-
 
 /* y_0 := (1 - x_0**3)**(1/3). */
-inline void compute_y_value (mpx_t y_0) {
- double        nenner, diff;
- mpx_t  tmpx1, tmpx2, tmpx3;
+inline void compute_y_value(mpx_t y_0)
+{
+    double nenner, diff;
+    mpx_t tmpx1, tmpx2, tmpx3;
 
- mpx_add (y_0, y_0, y_diff);
- /* y_0 -= step * A. Lineare Verbesserung des Startwerts.
-    Minus, weil wir rueckwaerts durch das Intervall laufen.
-    y_diff wird einmal pro 1000000 Fliesen ausgerechnet.
-    A ist immer negativ, also (-step)*A > 0.
-    Beachte, y_diff > 0 nach Initialisierung. */
+    mpx_add(y_0, y_0, y_diff);
+    /* y_0 -= step * A. Lineare Verbesserung des Startwerts.
+       Minus, weil wir rueckwaerts durch das Intervall laufen.
+       y_diff wird einmal pro 1000000 Fliesen ausgerechnet.
+       A ist immer negativ, also (-step)*A > 0.
+       Beachte, y_diff > 0 nach Initialisierung. */
 
- mpx_mul (tmpx1, x_0, x_0);
- mpx_mul (tmpx2, tmpx1, x_0);
- tmpx3[0] = ~tmpx2[0]; tmpx3[1] = ~tmpx2[1];
- /* y3 = 1 - x_0*x_0*x_0; */
- /* Wir machen einen Fehler von exakt 2**(-128). */
+    mpx_mul(tmpx1, x_0, x_0);
+    mpx_mul(tmpx2, tmpx1, x_0);
+    tmpx3[0] = ~tmpx2[0];
+    tmpx3[1] = ~tmpx2[1];
+    /* y3 = 1 - x_0*x_0*x_0; */
+    /* Wir machen einen Fehler von exakt 2**(-128). */
 
- mpx_mul (tmpx1, y_0, y_0);
- nenner = 3.0 * mpx_get_d (tmpx1);
+    mpx_mul(tmpx1, y_0, y_0);
+    nenner = 3.0 * mpx_get_d(tmpx1);
 
- mpx_mul (tmpx2, y_0, tmpx1);
- mpx_sub (tmpx1, tmpx2, tmpx3);
- diff = mpx_get_d (tmpx1);
- if (diff > 0.5) {
-  sprintf (output, "Underflow.\n"); out ();
-  exit (0);
- }
- diff /= nenner;
+    mpx_mul(tmpx2, y_0, tmpx1);
+    mpx_sub(tmpx1, tmpx2, tmpx3);
+    diff = mpx_get_d(tmpx1);
+    if (diff > 0.5)
+    {
+        sprintf(output, "Underflow.\n");
+        out();
+        exit(0);
+    }
+    diff /= nenner;
 
- mpx_set_d (tmpx1, diff);
- mpx_sub (y_0, y_0, tmpx1);
- /* Eine Newton-Iteration. */
- /* y_0 = (2*y_0 + y3/(y_0*y_0)) / 3
-        = (2*y_0*y_0*y_0 + y3) / (3*y_0*y_0)
-        = y_0 + (y3 - y_0*y_0*y_0) / (3*y_0*y_0);
-    Differenz kann in double berechnet werden. */
- /* Eine Newton-Iteration. */
+    mpx_set_d(tmpx1, diff);
+    mpx_sub(y_0, y_0, tmpx1);
+    /* Eine Newton-Iteration. */
+    /* y_0 = (2*y_0 + y3/(y_0*y_0)) / 3
+           = (2*y_0*y_0*y_0 + y3) / (3*y_0*y_0)
+           = y_0 + (y3 - y_0*y_0*y_0) / (3*y_0*y_0);
+       Differenz kann in double berechnet werden. */
+    /* Eine Newton-Iteration. */
 
- /* mpf_set_mpx (tmp1, y_0);
- gmp_sprintf (output, "y_0 = %.*Ff.\n", 40, tmp1); out (); */
+    /* mpf_set_mpx (tmp1, y_0);
+    gmp_sprintf (output, "y_0 = %.*Ff.\n", 40, tmp1); out (); */
 }
-
 
 /* Schreibt y'(x_0) in die globale Variable Ax. */
-inline void berechne_y_strich (mpx_t y_0) {
- mpx_t  tmpx1, tmpx2;
+inline void berechne_y_strich(mpx_t y_0)
+{
+    mpx_t tmpx1, tmpx2;
 
- /* Berechne zunaechst 1/y_0. */
+    /* Berechne zunaechst 1/y_0. */
 
- /* Lineare Verbesserung des Startwerts. */
- mpx_sub (y_inv, y_inv, y_inv_diff);
+    /* Lineare Verbesserung des Startwerts. */
+    mpx_sub(y_inv, y_inv, y_inv_diff);
 
- /* Jetzt Newton-Iteration inv_neu = inv + (1 - y_0 * inv) * inv.
- Da y_inv den Wert 1/y - 1 annaehert, muessen wir
-      y_inv = y_inv + (1 - y_0 * (1 + y_inv)) * (1 + y_inv)
-            = y_inv + (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) * y_inv
- rechnen. */
- mpx_mul (tmpx1, y_0, y_inv);
- mpx_add (tmpx2, tmpx1, y_0); /* tmpx2 ist y_0 + y_0 * y_inv. */
- tmpx2[0] = ~tmpx2[0]; tmpx2[1] = ~tmpx2[1];
- /* tmpx2 ist jetzt 1 - y_0 - y_0 * y_inv. Fehler von 2**(-128) ignoriert. */
- mpx_mul (tmpx1, tmpx2, y_inv);
- mpx_add (tmpx1, tmpx1, tmpx2);
- /* tmpx1 ist (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) * y_inv. */
- mpx_add (y_inv, y_inv, tmpx1);
- /* mpf_set_mpx (tmp1, y_inv);
- gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
+    /* Jetzt Newton-Iteration inv_neu = inv + (1 - y_0 * inv) * inv.
+    Da y_inv den Wert 1/y - 1 annaehert, muessen wir
+         y_inv = y_inv + (1 - y_0 * (1 + y_inv)) * (1 + y_inv)
+               = y_inv + (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) *
+    y_inv
+    rechnen. */
+    mpx_mul(tmpx1, y_0, y_inv);
+    mpx_add(tmpx2, tmpx1, y_0); /* tmpx2 ist y_0 + y_0 * y_inv. */
+    tmpx2[0] = ~tmpx2[0];
+    tmpx2[1] = ~tmpx2[1];
+    /* tmpx2 ist jetzt 1 - y_0 - y_0 * y_inv. Fehler von 2**(-128) ignoriert. */
+    mpx_mul(tmpx1, tmpx2, y_inv);
+    mpx_add(tmpx1, tmpx1, tmpx2);
+    /* tmpx1 ist (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) * y_inv. */
+    mpx_add(y_inv, y_inv, tmpx1);
+    /* mpf_set_mpx (tmp1, y_inv);
+    gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
 
- /* Berechne jetzt 
-         y'(x_0) = Ax := x_0**2 / y_0**2
-                 = x_0**2 * (1 + y_inv)**2
-                 = x_0**2 + x_0**2 * (y_inv**2 + 2*y_inv). */
- mpx_mul (tmpx1, y_inv, y_inv);
- mpx_add (tmpx1, tmpx1, y_inv);
- mpx_add (tmpx1, tmpx1, y_inv); /* tmpx1 ist jetzt y_inv**2 + 2*y_inv. */
- mpx_mul (tmpx2, x_0, x_0); /* tmpx2 ist x_0**2. */
- mpx_mul (Ax, tmpx2, tmpx1); /* Ax ist jetzt x_0**2 * (y_inv**2 + 2*y_inv). */
- mpx_add (Ax, Ax, tmpx2);
- /* mpf_set_mpx (tmp1, Ax);
- gmp_sprintf (output, "A = %.*Ff.\n", 40, tmp1); */
+    /* Berechne jetzt
+            y'(x_0) = Ax := x_0**2 / y_0**2
+                    = x_0**2 * (1 + y_inv)**2
+                    = x_0**2 + x_0**2 * (y_inv**2 + 2*y_inv). */
+    mpx_mul(tmpx1, y_inv, y_inv);
+    mpx_add(tmpx1, tmpx1, y_inv);
+    mpx_add(tmpx1, tmpx1, y_inv); /* tmpx1 ist jetzt y_inv**2 + 2*y_inv. */
+    mpx_mul(tmpx2, x_0, x_0);     /* tmpx2 ist x_0**2. */
+    mpx_mul(Ax, tmpx2, tmpx1); /* Ax ist jetzt x_0**2 * (y_inv**2 + 2*y_inv). */
+    mpx_add(Ax, Ax, tmpx2);
+    /* mpf_set_mpx (tmp1, Ax);
+    gmp_sprintf (output, "A = %.*Ff.\n", 40, tmp1); */
 
- /* Ax = - x_0*x_0 / (y_0*y_0); */
- /* Ableitung von
-        y(x) := (1 - x**3)**(1/3)
-    nach dem Satz ueber implizite Funktionen. */
- /* A = (y_1 - y_0) / (x_1 - x_0); */
- /* A = - x_0*x_0 / pow (1 - x_0*x_0*x_0, 2.0/3.0); */
+    /* Ax = - x_0*x_0 / (y_0*y_0); */
+    /* Ableitung von
+           y(x) := (1 - x**3)**(1/3)
+       nach dem Satz ueber implizite Funktionen. */
+    /* A = (y_1 - y_0) / (x_1 - x_0); */
+    /* A = - x_0*x_0 / pow (1 - x_0*x_0*x_0, 2.0/3.0); */
 }
 
+inline void compute_three_linearf(double l[3][3], long v[3][3], mpx_t y_0,
+                                  double d, double N)
+{
+    long i;
+    mpx_t tmpx1, tmpx2, tmpx3, Bx;
 
-inline void compute_three_linearf
-  (double l[3][3], long v[3][3], mpx_t y_0, double d, double N) {
- long                         i;
- mpx_t  tmpx1, tmpx2, tmpx3, Bx;
+    /* mpf_set_mpx (tmp1, x_0);
+    gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
+    mpx_mul(tmpx1, Ax, x_0);
+    /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
+    if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
+        mpx_add(tmpx1, tmpx1, x_0);
 
+    /* mpf_set_mpx (tmp1, tile_offset);
+    gmp_sprintf (output, "tile_offset = %.*Ff.\n", 40, tmp1); out (); */
+    mpx_sub(tmpx2, y_0, tile_offset);
+    mpx_add(Bx, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
+    /* Bx = y_0 - tile_offset - Ax * x_0; */
+    /* Es gilt 1 <= Bx <= 1.6. Speichern in Wirklichkeit Bx - 1. */
+    /* mpf_set_mpx (tmp1, Ax); mpf_set_mpx (tmp2, Bx);
+    gmp_sprintf (output, "A = %.*Ff.\nB = %.*Ff.\n", 40, tmp1, 40, tmp2); out
+    (); */
 
- /* mpf_set_mpx (tmp1, x_0);
- gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
- mpx_mul (tmpx1, Ax, x_0);
- /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
- if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
-  mpx_add (tmpx1, tmpx1, x_0);
+    for (i = 0; i < 3; i++)
+    {
+        l[0][i] = v[i][2] / N;
+        /* sprintf (output, "l[0][%ld] = %f.\n", i, l[0][i]); out (); */
+        /* Hier keine Probleme mit der Genauigkeit. */
 
- /* mpf_set_mpx (tmp1, tile_offset);
- gmp_sprintf (output, "tile_offset = %.*Ff.\n", 40, tmp1); out (); */
- mpx_sub (tmpx2, y_0, tile_offset);
- mpx_add (Bx, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
- /* Bx = y_0 - tile_offset - Ax * x_0; */
- /* Es gilt 1 <= Bx <= 1.6. Speichern in Wirklichkeit Bx - 1. */
- /* mpf_set_mpx (tmp1, Ax); mpf_set_mpx (tmp2, Bx);
- gmp_sprintf (output, "A = %.*Ff.\nB = %.*Ff.\n", 40, tmp1, 40, tmp2); out (); */
+        mpx_mul_si(tmpx1, x_0, -v[i][2]);
+        mpxb_add_si(tmpx2, tmpx1, v[i][0]);
+        /* tmpx = v[i][0] - v[i][2] * x_0; */
+        l[1][i] = mpxg_get_d_simple(tmpx2);
+        l[1][i] /= (half_step * N);
+        /* sprintf (output, "l[1][%ld] = %f.\n", i, l[1][i]); out (); */
+        /* Es ist step*N \approx 100.
+           Wir brauchen also tmp2 auf >2 (7?) Nachkommastellen.
+           Hierfuer sollte double ausreichen.
+           tmp2 ist auf 128 Bit, also >=23 Nachkommastellen genau. */
 
- for (i = 0; i < 3; i++) {
-  l[0][i] = v[i][2] / N;
-  /* sprintf (output, "l[0][%ld] = %f.\n", i, l[0][i]); out (); */
-  /* Hier keine Probleme mit der Genauigkeit. */
+        mpx_mul_si(tmpx1, Ax, v[i][0]);
+        /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach.
+         */
+        if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
+            mpxb_add_si(tmpx1, tmpx1, v[i][0]);
 
-  mpx_mul_si (tmpx1, x_0, -v[i][2]);
-  mpxb_add_si (tmpx2, tmpx1, v[i][0]);
-  /* tmpx = v[i][0] - v[i][2] * x_0; */
-  l[1][i] = mpxg_get_d_simple (tmpx2);
-  l[1][i] /= (half_step * N);
-  /* sprintf (output, "l[1][%ld] = %f.\n", i, l[1][i]); out (); */
-  /* Es ist step*N \approx 100.
-     Wir brauchen also tmp2 auf >2 (7?) Nachkommastellen.
-     Hierfuer sollte double ausreichen.
-     tmp2 ist auf 128 Bit, also >=23 Nachkommastellen genau. */
-
-  mpx_mul_si (tmpx1, Ax, v[i][0]);
-  /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
-  if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
-   mpxb_add_si (tmpx1, tmpx1, v[i][0]);
-
-  mpx_mul_si (tmpx2, Bx, -v[i][2]);
-  mpx_add (tmpx3, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
-  mpxb_add_si (tmpx1, tmpx3, v[i][1] - v[i][2]); /* Bx \in [1..2]. */
-  /* tmpx = v[i][1] - Ax * v[i][0] - Bx * v[i][2]; */
-  l[2][i] = mpxg_get_d (tmpx1);
-  l[2][i] /= (d*N);
-  /* sprintf (output, "l[2][%ld] = %f.\n", i, l[2][i]); out (); */
-  /* l[2][i] reagiert am sensibelsten auf zu wenig Precision.
-     Es ist d*N \approx 1.0e-15.
-     Wir brauchen also tmp2 auf > 15 (20?) Dezimalstellen hinter dem Komma.
-     Also Ax und Bx auf 35 Dezimalstellen, entsprechend 128 Bit. */
- }
+        mpx_mul_si(tmpx2, Bx, -v[i][2]);
+        mpx_add(tmpx3, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
+        mpxb_add_si(tmpx1, tmpx3, v[i][1] - v[i][2]); /* Bx \in [1..2]. */
+        /* tmpx = v[i][1] - Ax * v[i][0] - Bx * v[i][2]; */
+        l[2][i] = mpxg_get_d(tmpx1);
+        l[2][i] /= (d * N);
+        /* sprintf (output, "l[2][%ld] = %f.\n", i, l[2][i]); out (); */
+        /* l[2][i] reagiert am sensibelsten auf zu wenig Precision.
+           Es ist d*N \approx 1.0e-15.
+           Wir brauchen also tmp2 auf > 15 (20?) Dezimalstellen hinter dem
+           Komma.
+           Also Ax und Bx auf 35 Dezimalstellen, entsprechend 128 Bit. */
+    }
 }
-
 
 /* Makros fuer lll. */
-#define scal_prod(prod, l, vec1, vec2)                            \
-do {                                                              \
- long          t1, t2;                                            \
- double  l1[3], l2[3];                                            \
-                                                                  \
- for (t1 = 0; t1 < 3; t1++)                                       \
-  l1[t1] = l2[t1] = 0;                                            \
- for (t1 = 0; t1 < 3; t1++) {                                     \
-  for (t2 = 0; t2 < 3; t2++) {                                    \
-   l1[t1] += l[t1][t2] * vec1[t2];                                \
-   l2[t1] += l[t1][t2] * vec2[t2];                                \
-  }                                                               \
- }                                                                \
- prod = 0;                                                        \
- for (t1 = 0; t1 < 3; t1++)                                       \
-  prod += l1[t1]*l2[t1];                                          \
-} while (0);
+#define scal_prod(prod, l, vec1, vec2)                                         \
+    do                                                                         \
+    {                                                                          \
+        long t1, t2;                                                           \
+        double l1[3], l2[3];                                                   \
+                                                                               \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+            l1[t1] = l2[t1] = 0;                                               \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+        {                                                                      \
+            for (t2 = 0; t2 < 3; t2++)                                         \
+            {                                                                  \
+                l1[t1] += l[t1][t2] * vec1[t2];                                \
+                l2[t1] += l[t1][t2] * vec2[t2];                                \
+            }                                                                  \
+        }                                                                      \
+        prod = 0;                                                              \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+            prod += l1[t1] * l2[t1];                                           \
+    } while (0);
 
+#define gram()                                                                 \
+    do                                                                         \
+    {                                                                          \
+        long t1;                                                               \
+                                                                               \
+        /* sprintf (output, "Gram!\n"); out (); */                             \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+            vec_gram[0][t1] = vec[0][t1]; /* double = long */                  \
+        scal_prod(B[0], l, vec_gram[0], vec_gram[0]);                          \
+        scal_prod(mu[1][0], l, vec[1], vec_gram[0]);                           \
+        mu[1][0] /= B[0];                                                      \
+                                                                               \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+            vec_gram[1][t1] = vec[1][t1] - mu[1][0] * vec_gram[0][t1];         \
+        scal_prod(B[1], l, vec_gram[1], vec_gram[1]);                          \
+        scal_prod(mu[2][0], l, vec[2], vec_gram[0]);                           \
+        mu[2][0] /= B[0];                                                      \
+        scal_prod(mu[2][1], l, vec[2], vec_gram[1]);                           \
+        mu[2][1] /= B[1];                                                      \
+                                                                               \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+            vec_gram[2][t1] = vec[2][t1] - mu[2][0] * vec_gram[0][t1] -        \
+                              mu[2][1] * vec_gram[1][t1];                      \
+        scal_prod(B[2], l, vec_gram[2], vec_gram[2]);                          \
+    } while (0)
 
+#define red_k_k1()                                                             \
+    do                                                                         \
+    {                                                                          \
+        /* sprintf (output, "Mache RED (%ld, %ld).\n", k, k-1); out (); */     \
+        tm = floor(mu[k][k - 1] + 0.5);                                        \
+        /* if (fabs (tm) > (1LU << 63) - 1) {                                  \
+         sprintf (output, "q ist zu lang.\n"); out ();                         \
+         exit (0);                                                             \
+        } */                                                                   \
+        q = lround(tm);                                                        \
+        if (q != 0)                                                            \
+        {                                                                      \
+            for (i = 0; i < 3; i++)                                            \
+                vec[k][i] -= q * vec[k - 1][i];                                \
+            mu[k][k - 1] -= tm;                                                \
+            if (k == 2)                                                        \
+                mu[2][0] -= tm * mu[1][0];                                     \
+        }                                                                      \
+    } while (0)
 
-#define gram()                                                    \
- do {                                                             \
-  long  t1;                                                       \
-                                                                  \
-  /* sprintf (output, "Gram!\n"); out (); */                        \
-  for (t1 = 0; t1 < 3; t1++)                                      \
-   vec_gram[0][t1] = vec[0][t1];      /* double = long */         \
-  scal_prod (B[0], l, vec_gram[0], vec_gram[0]);                  \
-  scal_prod (mu[1][0], l, vec[1], vec_gram[0]); mu[1][0] /= B[0]; \
-                                                                  \
-  for (t1 = 0; t1 < 3; t1++)                                      \
-   vec_gram[1][t1] = vec[1][t1] - mu[1][0] * vec_gram[0][t1];     \
-  scal_prod (B[1], l, vec_gram[1], vec_gram[1]);                  \
-  scal_prod (mu[2][0], l, vec[2], vec_gram[0]); mu[2][0] /= B[0]; \
-  scal_prod (mu[2][1], l, vec[2], vec_gram[1]); mu[2][1] /= B[1]; \
-                                                                  \
-  for (t1 = 0; t1 < 3; t1++)                                      \
-   vec_gram[2][t1] = vec[2][t1] - mu[2][0] * vec_gram[0][t1]      \
-                                - mu[2][1] * vec_gram[1][t1];     \
-  scal_prod (B[2], l, vec_gram[2], vec_gram[2]);                  \
-} while (0)
+#define red_2_0()                                                              \
+    do                                                                         \
+    {                                                                          \
+        /* sprintf (output, "Mache RED (2, 0).\n"); out (); */                 \
+        tm = floor(mu[2][0] + 0.5);                                            \
+        q = lround(tm);                                                        \
+        /* if (fabs (tm) > (1LU << 63) - 1) {                                  \
+         sprintf (output, "q ist zu lang.\n"); out ();                         \
+         exit (0);                                                             \
+        } */                                                                   \
+        if (q != 0)                                                            \
+            for (i = 0; i < 3; i++)                                            \
+                vec[2][i] -= q * vec[0][i];                                    \
+    } while (0)
 
-
-#define red_k_k1()                                                \
- do {                                                             \
-  /* sprintf (output, "Mache RED (%ld, %ld).\n", k, k-1); out (); */\
-  tm = floor (mu[k][k-1] + 0.5);                                  \
-  /* if (fabs (tm) > (1LU << 63) - 1) {                           \
-   sprintf (output, "q ist zu lang.\n"); out ();                    \
-   exit (0);                                                      \
-  } */                                                            \
-  q = lround (tm);                                                \
-  if (q != 0) {                                                   \
-   for (i = 0; i < 3; i++)                                        \
-    vec[k][i] -= q * vec[k-1][i];                                 \
-   mu[k][k-1] -= tm;                                              \
-   if (k == 2)                                                    \
-    mu[2][0] -= tm * mu[1][0];                                    \
-  }                                                               \
-} while (0)
-
-
-#define red_2_0()                                                 \
- do {                                                             \
-  /* sprintf (output, "Mache RED (2, 0).\n"); out (); */            \
-  tm = floor (mu[2][0] + 0.5);                                    \
-  q = lround (tm);                                                \
-  /* if (fabs (tm) > (1LU << 63) - 1) {                           \
-   sprintf (output, "q ist zu lang.\n"); out ();                    \
-   exit (0);                                                      \
-  } */                                                            \
-  if (q != 0)                                                     \
-   for (i = 0; i < 3; i++)                                        \
-    vec[2][i] -= q * vec[0][i];                                   \
-} while (0)
-
-
-#define lll_swap()                                                \
-do {                                                              \
- /* sprintf (output, "Mache SWAP (%ld).\n", k); out (); */          \
- for (i = 0; i < 3; i++) {                                        \
-  tmp = vec[k][i];                                                \
-  vec[k][i] = vec[k-1][i];                                        \
-  vec[k-1][i] = tmp;                                              \
- }                                                                \
-                                                                  \
- muc = mu[k][k-1];                                                \
- Bc = B[k] + muc*muc * B[k-1];                                    \
- mu[k][k-1] = muc * B[k-1] / Bc;                                  \
- B[k] = B[k-1]*B[k] / Bc;                                         \
- B[k-1] = Bc;                                                     \
-                                                                  \
- if (k == 1) {                                                    \
-  t = mu[2][1];                                                   \
-  mu[2][1] = mu[2][0] - muc*t;                                    \
-  mu[2][0] = t + mu[1][0]*mu[2][1];                               \
- }                                                                \
- else { /* k == 2*/                                               \
-  tm = mu[2][0];                                                  \
-  mu[2][0] = mu[1][0];                                            \
-  mu[1][0] = tm;                                                  \
- }                                                                \
- k = 1;                                                           \
-} while (0)
-
+#define lll_swap()                                                             \
+    do                                                                         \
+    {                                                                          \
+        /* sprintf (output, "Mache SWAP (%ld).\n", k); out (); */              \
+        for (i = 0; i < 3; i++)                                                \
+        {                                                                      \
+            tmp = vec[k][i];                                                   \
+            vec[k][i] = vec[k - 1][i];                                         \
+            vec[k - 1][i] = tmp;                                               \
+        }                                                                      \
+                                                                               \
+        muc = mu[k][k - 1];                                                    \
+        Bc = B[k] + muc * muc * B[k - 1];                                      \
+        mu[k][k - 1] = muc * B[k - 1] / Bc;                                    \
+        B[k] = B[k - 1] * B[k] / Bc;                                           \
+        B[k - 1] = Bc;                                                         \
+                                                                               \
+        if (k == 1)                                                            \
+        {                                                                      \
+            t = mu[2][1];                                                      \
+            mu[2][1] = mu[2][0] - muc * t;                                     \
+            mu[2][0] = t + mu[1][0] * mu[2][1];                                \
+        }                                                                      \
+        else                                                                   \
+        {/* k == 2*/                                                           \
+            tm = mu[2][0];                                                     \
+            mu[2][0] = mu[1][0];                                               \
+            mu[1][0] = tm;                                                     \
+        }                                                                      \
+        k = 1;                                                                 \
+    } while (0)
 
 /* LLL -- double-Version.
    Die Funktion erwartet die drei Linearformen als in l gegeben.
@@ -498,63 +518,72 @@ do {                                                              \
    ACHTUNG: Diese Funktion arbeitet nur, wenn l aus nicht zu groszen Zahlen
    besteht. Wir laufen an der Kurve entlang und hoffen, dass die Vektoren, die
    bei letzten Fliese kurz waren, jetzt nicht sehr lang sind. */
-inline void lll (double l[3][3], long vec[3][3]) {
- long                    i, k;
- double  B[3], vec_gram[3][3];
- double              mu[3][3];
- long                  q, tmp;
- double        muc, Bc, t, tm;
+inline void lll(double l[3][3], long vec[3][3])
+{
+    long i, k;
+    double B[3], vec_gram[3][3];
+    double mu[3][3];
+    long q, tmp;
+    double muc, Bc, t, tm;
 
- /* Standardbasis. Der erste Kandidat fuer die Transformationsmatrix. */
- vec[0][0] = 1;  vec[0][1] = 0;  vec[0][2] = 0;
- vec[1][0] = 0;  vec[1][1] = 1;  vec[1][2] = 0;
- vec[2][0] = 0;  vec[2][1] = 0;  vec[2][2] = 1;
+    /* Standardbasis. Der erste Kandidat fuer die Transformationsmatrix. */
+    vec[0][0] = 1;
+    vec[0][1] = 0;
+    vec[0][2] = 0;
+    vec[1][0] = 0;
+    vec[1][1] = 1;
+    vec[1][2] = 0;
+    vec[2][0] = 0;
+    vec[2][1] = 0;
+    vec[2][2] = 1;
 
- /* LLL. */
- k = 1;
- gram ();
+    /* LLL. */
+    k = 1;
+    gram();
 
- while (k < 3) {
-  /* sprintf (output, "%ld\n", k); out (); */
-  red_k_k1 ();
+    while (k < 3)
+    {
+        /* sprintf (output, "%ld\n", k); out (); */
+        red_k_k1();
 
-  /* Test LLL condition */
-  if (B[k] < ((0.99 - mu[k][k-1]*mu[k][k-1]) * B[k-1])) {
-  /* if (B[k] < 0.5 * B[k-1]) { */
-   /* sprintf (output, "Swap mit k = %ld \n", k); out (); */
-   lll_swap ();
-   /* out (); */
-  }
-  else {
-   if (k == 2)
-    red_2_0 ();
-   k++;
-  }
- }
+        /* Test LLL condition */
+        if (B[k] < ((0.99 - mu[k][k - 1] * mu[k][k - 1]) * B[k - 1]))
+        {
+            /* if (B[k] < 0.5 * B[k-1]) { */
+            /* sprintf (output, "Swap mit k = %ld \n", k); out (); */
+            lll_swap();
+            /* out (); */
+        }
+        else
+        {
+            if (k == 2)
+                red_2_0();
+            k++;
+        }
+    }
 }
 
-
-#define lf_neu(lf, l, e)                                          \
-do {                                                              \
- /* long  t1, t2;                                                 \
- for (t1 = 0; t1 < 3; t1++)                                       \
-  for (t2 = 0; t2 < 3; t2++)                                      \
-   lf[t1][t2]                                                     \
-   = l[t1][0]*e[t2][0] + l[t1][1]*e[t2][1] + l[t1][2]*e[t2][2]; */\
-                                                                  \
- lf[0][0] = l[0][0]*e[0][0] + l[0][1]*e[0][1] + l[0][2]*e[0][2];  \
- lf[0][1] = l[0][0]*e[1][0] + l[0][1]*e[1][1] + l[0][2]*e[1][2];  \
- lf[0][2] = l[0][0]*e[2][0] + l[0][1]*e[2][1] + l[0][2]*e[2][2];  \
-                                                                  \
- lf[1][0] = l[1][0]*e[0][0] + l[1][1]*e[0][1] + l[1][2]*e[0][2];  \
- lf[1][1] = l[1][0]*e[1][0] + l[1][1]*e[1][1] + l[1][2]*e[1][2];  \
- lf[1][2] = l[1][0]*e[2][0] + l[1][1]*e[2][1] + l[1][2]*e[2][2];  \
-                                                                  \
- lf[2][0] = l[2][0]*e[0][0] + l[2][1]*e[0][1] + l[2][2]*e[0][2];  \
- lf[2][1] = l[2][0]*e[1][0] + l[2][1]*e[1][1] + l[2][2]*e[1][2];  \
- lf[2][2] = l[2][0]*e[2][0] + l[2][1]*e[2][1] + l[2][2]*e[2][2];  \
-} while (0);
-
+#define lf_neu(lf, l, e)                                                       \
+    do                                                                         \
+    {                                                                          \
+        /* long  t1, t2;                                                       \
+        for (t1 = 0; t1 < 3; t1++)                                             \
+         for (t2 = 0; t2 < 3; t2++)                                            \
+          lf[t1][t2]                                                           \
+          = l[t1][0]*e[t2][0] + l[t1][1]*e[t2][1] + l[t1][2]*e[t2][2]; */      \
+                                                                               \
+        lf[0][0] = l[0][0] * e[0][0] + l[0][1] * e[0][1] + l[0][2] * e[0][2];  \
+        lf[0][1] = l[0][0] * e[1][0] + l[0][1] * e[1][1] + l[0][2] * e[1][2];  \
+        lf[0][2] = l[0][0] * e[2][0] + l[0][1] * e[2][1] + l[0][2] * e[2][2];  \
+                                                                               \
+        lf[1][0] = l[1][0] * e[0][0] + l[1][1] * e[0][1] + l[1][2] * e[0][2];  \
+        lf[1][1] = l[1][0] * e[1][0] + l[1][1] * e[1][1] + l[1][2] * e[1][2];  \
+        lf[1][2] = l[1][0] * e[2][0] + l[1][1] * e[2][1] + l[1][2] * e[2][2];  \
+                                                                               \
+        lf[2][0] = l[2][0] * e[0][0] + l[2][1] * e[0][1] + l[2][2] * e[0][2];  \
+        lf[2][1] = l[2][0] * e[1][0] + l[2][1] * e[1][1] + l[2][2] * e[1][2];  \
+        lf[2][2] = l[2][0] * e[2][0] + l[2][1] * e[2][1] + l[2][2] * e[2][2];  \
+    } while (0);
 
 /******************************************************************************
  *
@@ -563,279 +592,298 @@ do {                                                              \
  *****************************************************************************/
 
 /* res = m * v, 3x3-Matrix mal Spaltenvektor. */
-#define MMUL(res, m, v)                                           \
-do {                                                              \
- /* long  k;                                                      \
-                                                                  \
- for (k = 0; k < 3; k++)                                          \
-  res[k] = m[k][0]*v[0] + m[k][1]*v[1] + m[k][2]*v[2]; */         \
-                                                                  \
- res[0] = m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2];             \
- res[1] = m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2];             \
- res[2] = m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2];             \
-} while (0)
-
+#define MMUL(res, m, v)                                                        \
+    do                                                                         \
+    {                                                                          \
+        /* long  k;                                                            \
+                                                                               \
+        for (k = 0; k < 3; k++)                                                \
+         res[k] = m[k][0]*v[0] + m[k][1]*v[1] + m[k][2]*v[2]; */               \
+                                                                               \
+        res[0] = m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2];             \
+        res[1] = m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2];             \
+        res[2] = m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2];             \
+    } while (0)
 
 /* Berechne die vier Ecken der Pyramide. */
-inline void pyr_ecken
- (double pt1[3], double pt2[3], double pt3[3], double pt4[3], double lf[3][3]) {
- long                             i, j;
- double  det_inv, adj[3][3], inv[3][3];
+inline void pyr_ecken(double pt1[3], double pt2[3], double pt3[3],
+                      double pt4[3], double lf[3][3])
+{
+    long i, j;
+    double det_inv, adj[3][3], inv[3][3];
 
- /* Die Ecken sind gegeben durch (l1, l2, l3) (pti) = vi.
-    Wichtig: v1, ..., v4 sind in der Reihenfolge des Umlaufs gelistet. */
- double      v1[3] = {1.0,  1.0,  1.0};
- double      v2[3] = {1.0, -1.0,  1.0};
- double      v3[3] = {1.0, -1.0, -1.0};
- /* double      v4[3] = {1.0,  1.0, -1.0}; */
+    /* Die Ecken sind gegeben durch (l1, l2, l3) (pti) = vi.
+       Wichtig: v1, ..., v4 sind in der Reihenfolge des Umlaufs gelistet. */
+    double v1[3] = {1.0, 1.0, 1.0};
+    double v2[3] = {1.0, -1.0, 1.0};
+    double v3[3] = {1.0, -1.0, -1.0};
+    /* double      v4[3] = {1.0,  1.0, -1.0}; */
 
- /* Inverse Matrix bis auf Skalierung. */
- adj[0][0] = lf[1][1]*lf[2][2] - lf[1][2]*lf[2][1];
- adj[0][1] = - (lf[0][1]*lf[2][2] - lf[0][2]*lf[2][1]);
- adj[0][2] = lf[0][1]*lf[1][2] - lf[0][2]*lf[1][1];
+    /* Inverse Matrix bis auf Skalierung. */
+    adj[0][0] = lf[1][1] * lf[2][2] - lf[1][2] * lf[2][1];
+    adj[0][1] = -(lf[0][1] * lf[2][2] - lf[0][2] * lf[2][1]);
+    adj[0][2] = lf[0][1] * lf[1][2] - lf[0][2] * lf[1][1];
 
- adj[1][0] = - (lf[1][0]*lf[2][2] - lf[1][2]*lf[2][0]);
- adj[1][1] = lf[0][0]*lf[2][2] - lf[0][2]*lf[2][0];
- adj[1][2] = - (lf[0][0]*lf[1][2] - lf[0][2]*lf[1][0]);
+    adj[1][0] = -(lf[1][0] * lf[2][2] - lf[1][2] * lf[2][0]);
+    adj[1][1] = lf[0][0] * lf[2][2] - lf[0][2] * lf[2][0];
+    adj[1][2] = -(lf[0][0] * lf[1][2] - lf[0][2] * lf[1][0]);
 
- adj[2][0] = lf[1][0]*lf[2][1] - lf[1][1]*lf[2][0];
- adj[2][1] = - (lf[0][0]*lf[2][1] - lf[0][1]*lf[2][0]);
- adj[2][2] = lf[0][0]*lf[1][1] - lf[0][1]*lf[1][0];
+    adj[2][0] = lf[1][0] * lf[2][1] - lf[1][1] * lf[2][0];
+    adj[2][1] = -(lf[0][0] * lf[2][1] - lf[0][1] * lf[2][0]);
+    adj[2][2] = lf[0][0] * lf[1][1] - lf[0][1] * lf[1][0];
 
- /* Determinante */
- det_inv = 1.0 / (lf[0][0]*adj[0][0] + lf[0][1]*adj[1][0] + lf[0][2]*adj[2][0]);
- /* sprintf (output, "det_inv = %.15f\n", det_inv); out (); */
- /* Inverse */
- for (i = 0; i < 3; i++)
-  for (j = 0; j < 3; j++)
-   inv[i][j] = adj[i][j] * det_inv;
+    /* Determinante */
+    det_inv = 1.0 / (lf[0][0] * adj[0][0] + lf[0][1] * adj[1][0] +
+                     lf[0][2] * adj[2][0]);
+    /* sprintf (output, "det_inv = %.15f\n", det_inv); out (); */
+    /* Inverse */
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            inv[i][j] = adj[i][j] * det_inv;
 
- MMUL (pt1, inv, v1);
- MMUL (pt2, inv, v2);
- MMUL (pt3, inv, v3);
- /* MMUL (pt4, inv, v4); */
- pt4[0] = pt1[0] + pt3[0] - pt2[0];
- pt4[1] = pt1[1] + pt3[1] - pt2[1];
- pt4[2] = pt1[2] + pt3[2] - pt2[2];
+    MMUL(pt1, inv, v1);
+    MMUL(pt2, inv, v2);
+    MMUL(pt3, inv, v3);
+    /* MMUL (pt4, inv, v4); */
+    pt4[0] = pt1[0] + pt3[0] - pt2[0];
+    pt4[1] = pt1[1] + pt3[1] - pt2[1];
+    pt4[2] = pt1[2] + pt3[2] - pt2[2];
 
- /* sprintf (output, "Ecken:\n"); out ();
- sprintf (output, "pt1 = (%f, %f, %f)\n", pt1[0], pt1[1], pt1[2]); out ();
- sprintf (output, "pt2 = (%f, %f, %f)\n", pt2[0], pt2[1], pt2[2]); out ();
- sprintf (output, "pt3 = (%f, %f, %f)\n", pt3[0], pt3[1], pt3[2]); out ();
- sprintf (output, "pt4 = (%f, %f, %f)\n", pt4[0], pt4[1], pt4[2]); out (); */
+    /* sprintf (output, "Ecken:\n"); out ();
+    sprintf (output, "pt1 = (%f, %f, %f)\n", pt1[0], pt1[1], pt1[2]); out ();
+    sprintf (output, "pt2 = (%f, %f, %f)\n", pt2[0], pt2[1], pt2[2]); out ();
+    sprintf (output, "pt3 = (%f, %f, %f)\n", pt3[0], pt3[1], pt3[2]); out ();
+    sprintf (output, "pt4 = (%f, %f, %f)\n", pt4[0], pt4[1], pt4[2]); out (); */
 }
-
 
 /* z laeuft in der auszersten Schleife.
    Brauchen also Maximum und Minimum der z-Koordinaten der 5 Ecken
    der Pyramide. */
-inline void z_schranken (long *z_anf, long *z_end,
-                         double *p1, double *p2, double *p3, double *p4) {
- double  tmp1, tmp2;
+inline void z_schranken(long *z_anf, long *z_end, double *p1, double *p2,
+                        double *p3, double *p4)
+{
+    double tmp1, tmp2;
 
- tmp1 = MIN (MIN (MIN (p1[2], p2[2]), MIN (p3[2], p4[2])), 0.0);
- tmp2 = MAX (MAX (MAX (p1[2], p2[2]), MAX (p3[2], p4[2])), 0.0);
+    tmp1 = MIN(MIN(MIN(p1[2], p2[2]), MIN(p3[2], p4[2])), 0.0);
+    tmp2 = MAX(MAX(MAX(p1[2], p2[2]), MAX(p3[2], p4[2])), 0.0);
 
- *z_anf = lround (tmp1 + 0.5); /* Aufrunden. */
- *z_end = lround (tmp2 - 0.5); /* Abrunden. */
- /* Ganze Zahlen werden eventuell falsch gerundet.
- Dies ist aber kein Bug, weil wir ohnehin nur die Punkte im Innern der Pyramide
- brauchen. */
+    *z_anf = lround(tmp1 + 0.5); /* Aufrunden. */
+    *z_end = lround(tmp2 - 0.5); /* Abrunden. */
+    /* Ganze Zahlen werden eventuell falsch gerundet.
+    Dies ist aber kein Bug, weil wir ohnehin nur die Punkte im Innern der
+    Pyramide
+    brauchen. */
 
- /* sprintf (output, "z-Schranken: [%ld, %ld]\n", *z_anf, *z_end); out (); */
+    /* sprintf (output, "z-Schranken: [%ld, %ld]\n", *z_anf, *z_end); out (); */
 }
-
 
 /* Eine Kante dargestellt als array der Laenge 6.
    y = kante[2]*z + kante[3] und
    x = kante[4]*z + kante[5]
    fuer kante[0] <= z <= kante[1]. */
-inline void kante (double *kante, double *anf, double *end) {
- double  dz_inv;
+inline void kante(double *kante, double *anf, double *end)
+{
+    double dz_inv;
 
- dz_inv = 1 / (anf[2] - end[2]);
+    dz_inv = 1 / (anf[2] - end[2]);
 
- if (anf[2] < end[2]) {
-  kante[0] = anf[2];
-  kante[1] = end[2];
- }
- else {
-  kante[0] = end[2];
-  kante[1] = anf[2];
- }
- /* Ist dies eine Division durch 0, dann wird sowieso kante[0] = kante[1]
- (und dies ist hoffentlich keine ganze Zahl). */
- kante[2] = (anf[1] - end[1]) * dz_inv; /* dy/dz */
- kante[3] = anf[1] - kante[2]*anf[2];
+    if (anf[2] < end[2])
+    {
+        kante[0] = anf[2];
+        kante[1] = end[2];
+    }
+    else
+    {
+        kante[0] = end[2];
+        kante[1] = anf[2];
+    }
+    /* Ist dies eine Division durch 0, dann wird sowieso kante[0] = kante[1]
+    (und dies ist hoffentlich keine ganze Zahl). */
+    kante[2] = (anf[1] - end[1]) * dz_inv; /* dy/dz */
+    kante[3] = anf[1] - kante[2] * anf[2];
 
- kante[4] = (anf[0] - end[0]) * dz_inv; /* dx/dz */
- kante[5] = anf[0] - kante[4]*anf[2];
+    kante[4] = (anf[0] - end[0]) * dz_inv; /* dx/dz */
+    kante[5] = anf[0] - kante[4] * anf[2];
 
- /* sprintf (output, "Kante: y = %f*z + %f, x = %f*z + %f fuer %f <= z <= %f\n",
-               kante[2], kante[3], kante[4], kante[5], kante[0], kante[1]);
- out (); */
+    /* sprintf (output, "Kante: y = %f*z + %f, x = %f*z + %f fuer %f <= z <=
+    %f\n",
+                  kante[2], kante[3], kante[4], kante[5], kante[0], kante[1]);
+    out (); */
 }
-
 
 /* Berechne die acht Kanten der Pyramide. */
-inline void pyr_kanten (double kant[8][6],
-                 double *p1, double *p2, double *p3, double *p4) {
- double  s[3] = {0.0, 0.0, 0.0};
+inline void pyr_kanten(double kant[8][6], double *p1, double *p2, double *p3,
+                       double *p4)
+{
+    double s[3] = {0.0, 0.0, 0.0};
 
- kante (kant[0], s, p1);
- kante (kant[1], s, p2);
- kante (kant[2], s, p3);
- kante (kant[3], s, p4);
- kante (kant[4], p1, p2);
- kante (kant[5], p2, p3);
- kante (kant[6], p3, p4);
- kante (kant[7], p4, p1);
+    kante(kant[0], s, p1);
+    kante(kant[1], s, p2);
+    kante(kant[2], s, p3);
+    kante(kant[3], s, p4);
+    kante(kant[4], p1, p2);
+    kante(kant[5], p2, p3);
+    kante(kant[6], p3, p4);
+    kante(kant[7], p4, p1);
 }
-
 
 /* x und y laufen in den beiden inneren Schleifen.
    Wir schneiden also die Pyramide mit der z = ... - Ebene und haben ein
    Polygon. Wir brauchen das Maximum und das Minimum der x- bzw. y-Koordinaten
    der Ecken dieses Polygons.
    Ecken entstehen durch den Schnitt der Ebene mit den Kanten. */
-inline void x_und_y_schranken
-                  (long *x_anf, long *x_end, long *y_anf, long *y_end,
-                   double kant[8][6], long z) {
- int                          i;
- double                 *kan, k;
- double  xanf, xend, yanf, yend;
+inline void x_und_y_schranken(long *x_anf, long *x_end, long *y_anf,
+                              long *y_end, double kant[8][6], long z)
+{
+    int i;
+    double *kan, k;
+    double xanf, xend, yanf, yend;
 
- xanf = LONG_MAX;
- xend = LONG_MIN;
- yanf = LONG_MAX;
- yend = LONG_MIN;
+    xanf = LONG_MAX;
+    xend = LONG_MIN;
+    yanf = LONG_MAX;
+    yend = LONG_MIN;
 
- /* Schleife durch die acht Kanten. */
- for (i = 0; i < 8; i++) {
-  kan = kant[i]; /* Aktuelle Kante. */
-  /* Treffen wir diese Kante ueberhaupt? */
-  if ((kan[0] <= z) && (z <= kan[1])) {
-   k = kan[2]*z + kan[3];
-   yanf = MIN (yanf, k);
-   yend = MAX (yend, k);
-   k = kan[4]*z + kan[5];
-   xanf = MIN (xanf, k);
-   xend = MAX (xend, k);
-  }
- }
- *y_anf = lround (yanf + 0.5); /* Aufrunden. */
- *y_end = lround (yend - 0.5); /* Abrunden. */
- *x_anf = lround (xanf + 0.5); /* Aufrunden. */
- *x_end = lround (xend - 0.5); /* Abrunden. */
+    /* Schleife durch die acht Kanten. */
+    for (i = 0; i < 8; i++)
+    {
+        kan = kant[i]; /* Aktuelle Kante. */
+        /* Treffen wir diese Kante ueberhaupt? */
+        if ((kan[0] <= z) && (z <= kan[1]))
+        {
+            k = kan[2] * z + kan[3];
+            yanf = MIN(yanf, k);
+            yend = MAX(yend, k);
+            k = kan[4] * z + kan[5];
+            xanf = MIN(xanf, k);
+            xend = MAX(xend, k);
+        }
+    }
+    *y_anf = lround(yanf + 0.5); /* Aufrunden. */
+    *y_end = lround(yend - 0.5); /* Abrunden. */
+    *x_anf = lround(xanf + 0.5); /* Aufrunden. */
+    *x_end = lround(xend - 0.5); /* Abrunden. */
 
- /* sprintf (output, "x_y-Schranken fuer z = %ld: [%ld, %ld] x [%ld, %ld]\n",
-                                         z, *x_anf, *x_end, *y_anf, *y_end);
- out (); */
+    /* sprintf (output, "x_y-Schranken fuer z = %ld: [%ld, %ld] x [%ld, %ld]\n",
+                                            z, *x_anf, *x_end, *y_anf, *y_end);
+    out (); */
 }
-
 
 /* Ausgabe der Loesung. */
-void post_proc (long vec_out0, long vec_out1, long vec_out2, long f0) {
- /* double  quot, x0, x1; */
+void post_proc(long vec_out0, long vec_out1, long vec_out2, long f0)
+{
+    /* double  quot, x0, x1; */
 
- /* quot = ((double) vec_out0) / ((double) vec_out2); */
- /* sprintf (output, "%.18f\n", quot); out (); */
+    /* quot = ((double) vec_out0) / ((double) vec_out2); */
+    /* sprintf (output, "%.18f\n", quot); out (); */
 
- /* x0 = mpx_get_d (x_0);
- x0 -= half_step;
- x1 = x0 + 2 * half_step; */
- /* sprintf (output, "Intervall [%.18f,%.18f]\n\n", x0, x1); out (); */
+    /* x0 = mpx_get_d (x_0);
+    x0 -= half_step;
+    x1 = x0 + 2 * half_step; */
+    /* sprintf (output, "Intervall [%.18f,%.18f]\n\n", x0, x1); out (); */
 
- /* if ((x0 < quot) && (x1 > quot)) */ {
-  sprintf (output, "(%ld, %ld, %ld) Loesung fuer k = %ld.\n",
-                                          vec_out0, vec_out1, vec_out2, f0);
-  out ();
-  sprintf (output, "\n"); out ();
-  /* sprintf (output, "Loesung gefunden.\n"); out (); */
-  /* exit (0); */
- }
+    /* if ((x0 < quot) && (x1 > quot)) */
+    {
+        sprintf(output, "(%ld, %ld, %ld) Loesung fuer k = %ld.\n", vec_out0,
+                vec_out1, vec_out2, f0);
+        out();
+        sprintf(output, "\n");
+        out();
+        /* sprintf (output, "Loesung gefunden.\n"); out (); */
+        /* exit (0); */
+    }
 }
-
 
 /* Was ist v2**3 - v0**3 - v1**3 bei den aktuellen Werten von z, y und x?
    Alle Rechnungen modulo 2**64.
    Ausgabe der Tripel (v0, v1, v2), bei denen v0**3 + v1**3 - v2**3 wirklich
    gleich \pm3 ist. */
-inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
-                                long vec_h0, long vec_h1, long vec_h2) {
- long  vec_out0, vec_out1, vec_out2;
- ulong                           f0;
+inline ulong ein_funktionswert(long x, long v00, long v01, long v02,
+                               long vec_h0, long vec_h1, long vec_h2)
+{
+    long vec_out0, vec_out1, vec_out2;
+    ulong f0;
 
- /* sprintf (output, "x = %ld.\n", x); out (); */
+    /* sprintf (output, "x = %ld.\n", x); out (); */
 
- vec_out0 = x * v00 + vec_h0; /* Waere hier Rechnung in ulong logischer? */
- vec_out1 = x * v01 + vec_h1; /* Haben sowieso keinen Overflow. */
- vec_out2 = x * v02 + vec_h2;
+    vec_out0 = x * v00 + vec_h0; /* Waere hier Rechnung in ulong logischer? */
+    vec_out1 = x * v01 + vec_h1; /* Haben sowieso keinen Overflow. */
+    vec_out2 = x * v02 + vec_h2;
 
- /* Rechnung modulo 2**64. Deswegen Cast nach unsigned. */
- f0 = ((ulong) vec_out2) * ((ulong) vec_out2) * ((ulong) vec_out2) -
-      ((ulong) vec_out0) * ((ulong) vec_out0) * ((ulong) vec_out0) -
-      ((ulong) vec_out1) * ((ulong) vec_out1) * ((ulong) vec_out1);
+    /* Rechnung modulo 2**64. Deswegen Cast nach unsigned. */
+    f0 = ((ulong)vec_out2) * ((ulong)vec_out2) * ((ulong)vec_out2) -
+         ((ulong)vec_out0) * ((ulong)vec_out0) * ((ulong)vec_out0) -
+         ((ulong)vec_out1) * ((ulong)vec_out1) * ((ulong)vec_out1);
 
- /* Rechnen in kleine_vect nur den Fall z >= 0.
- Deshalb brauchen wir an dieser Stelle plus und minus.
- Ausgabe natuerlich als signed long ints. */
- if ((f0 < MAX_K) || (-f0 < MAX_K))
-  if (f0 != 0)
-   post_proc (vec_out0, vec_out1, vec_out2, f0); /* Ausgabe */
+    /* Rechnen in kleine_vect nur den Fall z >= 0.
+    Deshalb brauchen wir an dieser Stelle plus und minus.
+    Ausgabe natuerlich als signed long ints. */
+    if ((f0 < MAX_K) || (-f0 < MAX_K))
+        if (f0 != 0)
+            post_proc(vec_out0, vec_out1, vec_out2, f0); /* Ausgabe */
 
- return (f0);
+    return (f0);
 }
 
-
-#define XY_SCHLEIFE {                                                       \
-  for (y = y_anf; y <= y_end; y++) {                                        \
-   /* sprintf (output, "Rechne y = %ld.\n", y); out (); */                    \
-   vec_h0 = y * v[1][0] + z * v[2][0];                                      \
-   vec_h1 = y * v[1][1] + z * v[2][1];                                      \
-   vec_h2 = y * v[1][2] + z * v[2][2];                                      \
-                                                                            \
-   x = x_anf;                                                               \
-   /* Dieser Funktionsaufruf verursacht eine Ausgabe, falls f0 oder -f0     \
-   unterhalb der MAX_K liegt. */                                 \
-   f0 = ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2);       \
-   anz++;                                                                   \
-                                                                            \
-   x++;                                                                     \
-   f1 = ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2);       \
-   anz++;                                                                   \
-                                                                            \
-   x++;                                                                     \
-   f2 = ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2);       \
-   anz++;                                                                   \
-                                                                            \
-   x++;                                                                     \
-                                                                            \
-   /* Differenzenschema.*/                                                  \
-   d1 = f1 - f0;    d = f2 - f1;                                            \
-   dd =  d - d1;                                                            \
-   f = f2;                                                                  \
-   dd += ddd; /* dd einen Schritt im Vorlauf. */                            \
-   for (; x <= x_end; x++) {                                                \
-    d  += dd;                                                               \
-    dd += ddd;                                                              \
-    f  += d;                                                                \
-    /* if (f != ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2)) {\
-     sprintf (output, "%lu %lu\n", f,                                         \
-                 ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2));\
-     out ();
-     sprintf (output, "Bug im Differenzenschema!\n"); out ();                 \
-     exit (0);                                                              \
-    } */                                                                    \
-    anz++;                                                                  \
-    if ((f < MAX_K) || (-f < MAX_K))                  \
-     /* Dient nur der Ausgabe. Rechnen den Funktionswert ueberfluessigerweise
-     nochmals aus. Ist schneller als eine extra Funktion aufzurufen. */     \
-     ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2);          \
-   }                                                                        \
-  }                                                                         \
-} while (0);
-
+#define XY_SCHLEIFE                                                            \
+    {                                                                          \
+        for (y = y_anf; y <= y_end; y++)                                       \
+        {                                                                      \
+            /* sprintf (output, "Rechne y = %ld.\n", y); out (); */            \
+            vec_h0 = y * v[1][0] + z * v[2][0];                                \
+            vec_h1 = y * v[1][1] + z * v[2][1];                                \
+            vec_h2 = y * v[1][2] + z * v[2][2];                                \
+                                                                               \
+            x = x_anf;                                                         \
+            /* Dieser Funktionsaufruf verursacht eine Ausgabe, falls f0 oder   \
+            -f0                                                                \
+            unterhalb der MAX_K liegt. */                                      \
+            f0 = ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
+            anz++;                                                             \
+                                                                               \
+            x++;                                                               \
+            f1 = ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
+            anz++;                                                             \
+                                                                               \
+            x++;                                                               \
+            f2 = ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1, vec_h2);  \
+            anz++;                                                             \
+                                                                               \
+            x++;                                                               \
+                                                                               \
+            /* Differenzenschema.*/                                            \
+            d1 = f1 - f0;                                                      \
+            d = f2 - f1;                                                       \
+            dd = d - d1;                                                       \
+            f = f2;                                                            \
+            dd += ddd; /* dd einen Schritt im Vorlauf. */                      \
+            for (; x <= x_end; x++)                                            \
+            {                                                                  \
+                d += dd;                                                       \
+                dd += ddd;                                                     \
+                f += d;                                                        \
+                /* if (f != ein_funktionswert (x, v00, v01, v02, vec_h0,       \
+                vec_h1, vec_h2)) {                                             \
+                 sprintf (output, "%lu %lu\n", f,                              \
+                             ein_funktionswert (x, v00, v01, v02, vec_h0,      \
+                vec_h1, vec_h2));                                              \
+                 out ();                                                       \
+                 sprintf (output, "Bug im Differenzenschema!\n"); out ();      \
+                 exit (0);                                                     \
+                } */                                                           \
+                anz++;                                                         \
+                if ((f < MAX_K) || (-f < MAX_K))                               \
+                    /* Dient nur der Ausgabe. Rechnen den Funktionswert        \
+                    ueberfluessigerweise                                       \
+                    nochmals aus. Ist schneller als eine extra Funktion        \
+                    aufzurufen. */                                             \
+                    ein_funktionswert(x, v00, v01, v02, vec_h0, vec_h1,        \
+                                      vec_h2);                                 \
+            }                                                                  \
+        }                                                                      \
+    }                                                                          \
+    while (0)                                                                  \
+        ;
 
 /* Suche nach ganzen Vektoren mit
         0 < l1 < 1, |l2| < l1 und |l3| < l1.
@@ -844,125 +892,143 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
    rufen wir post_proc gar nicht erst auf.
    (Wegen vec[0]**3 + vec[1]**3 + vec[2]**3 = 0 (mod 3) sind entweder alle
    drei Komponenten durch 3 teilbar oder gar keine.) */
-inline long kleine_vect (double lf[3][3], long v[3][3]) {
- long                       x, y, z;
- long                  x_anf, x_end;
- long                  y_anf, y_end;
- long                  z_anf, z_end;
- long        vec_h0, vec_h1, vec_h2;
- long                           anz;
- long                 v00, v01, v02;
- double  p1[3], p2[3], p3[3], p4[3];
- double                  kant[8][6];
- ulong                f, f0, f1, f2;
- ulong               d, dd, ddd, d1;
+inline long kleine_vect(double lf[3][3], long v[3][3])
+{
+    long x, y, z;
+    long x_anf, x_end;
+    long y_anf, y_end;
+    long z_anf, z_end;
+    long vec_h0, vec_h1, vec_h2;
+    long anz;
+    long v00, v01, v02;
+    double p1[3], p2[3], p3[3], p4[3];
+    double kant[8][6];
+    ulong f, f0, f1, f2;
+    ulong d, dd, ddd, d1;
 
- /* sprintf (output, "lll-Basis:\n[%ld %ld %ld],\n[%ld %ld %ld],\n[%ld %ld %ld]\n",
-           v[0][0], v[0][1], v[0][2],
-           v[1][0], v[1][1], v[1][2],
-           v[2][0], v[2][1], v[2][2]);
- out ();
- sprintf (output, "Linearformen auf dem ersten Vektor: %f %f %f\n",
-                                               lf[0][0], lf[1][0], lf[2][0]);
- out (); */
+    /* sprintf (output, "lll-Basis:\n[%ld %ld %ld],\n[%ld %ld %ld],\n[%ld %ld
+    %ld]\n",
+              v[0][0], v[0][1], v[0][2],
+              v[1][0], v[1][1], v[1][2],
+              v[2][0], v[2][1], v[2][2]);
+    out ();
+    sprintf (output, "Linearformen auf dem ersten Vektor: %f %f %f\n",
+                                                  lf[0][0], lf[1][0], lf[2][0]);
+    out (); */
 
- /* Berechne die Ecken der Pyramide. Die Spitze ist der Nullpunkt. */
- pyr_ecken (p1, p2, p3, p4, lf);
- /* Berechne die Schranken fuer z. */
- z_schranken (&z_anf, &z_end, p1, p2, p3, p4);
+    /* Berechne die Ecken der Pyramide. Die Spitze ist der Nullpunkt. */
+    pyr_ecken(p1, p2, p3, p4, lf);
+    /* Berechne die Schranken fuer z. */
+    z_schranken(&z_anf, &z_end, p1, p2, p3, p4);
 
- /* Berechne die acht Kanten der Pyramide. */
- pyr_kanten (kant, p1, p2, p3, p4);
+    /* Berechne die acht Kanten der Pyramide. */
+    pyr_kanten(kant, p1, p2, p3, p4);
 
- /* Dreifachloop durch die Pyramide. */
- anz = 0;
- v00 = v[0][0]; v01 = v[0][1]; v02 = v[0][2];
- /* Differenzenschema, erster Teil.
- ddd ist unabhaengig von z, ueber die gesamte Fliese konstant. */
- ddd =  ((ulong) 6) *
-       (((ulong) v02) * ((ulong) v02) * ((ulong) v02)
-       -((ulong) v00) * ((ulong) v00) * ((ulong) v00)
-       -((ulong) v01) * ((ulong) v01) * ((ulong) v01));
+    /* Dreifachloop durch die Pyramide. */
+    anz = 0;
+    v00 = v[0][0];
+    v01 = v[0][1];
+    v02 = v[0][2];
+    /* Differenzenschema, erster Teil.
+    ddd ist unabhaengig von z, ueber die gesamte Fliese konstant. */
+    ddd = ((ulong)6) * (((ulong)v02) * ((ulong)v02) * ((ulong)v02) -
+                        ((ulong)v00) * ((ulong)v00) * ((ulong)v00) -
+                        ((ulong)v01) * ((ulong)v01) * ((ulong)v01));
 
- for (z = z_anf; z <= z_end; z++) {
-  /* Berechne die Schranken fuer x und y. */
-  x_und_y_schranken (&x_anf, &x_end, &y_anf, &y_end, kant, z);
-  XY_SCHLEIFE;
- }
- return (anz);
+    for (z = z_anf; z <= z_end; z++)
+    {
+        /* Berechne die Schranken fuer x und y. */
+        x_und_y_schranken(&x_anf, &x_end, &y_anf, &y_end, kant, z);
+        XY_SCHLEIFE;
+    }
+    return (anz);
 }
-
 
 /* Init. Die aeuszere Schleife. */
-void rechne_intervall (mpx_t x_0_anf, mpx_t x_0_ende) {
- mpx_t         step;
- mpx_t                  y_0;
- double  lf[3][3], ln[3][3];
- long      e[3][3], v[3][3];
- long     zaehler, anz, err;
+void rechne_intervall(mpx_t x_0_anf, mpx_t x_0_ende)
+{
+    mpx_t step;
+    mpx_t y_0;
+    double lf[3][3], ln[3][3];
+    long e[3][3], v[3][3];
+    long zaehler, anz, err;
 
- x_0[0] = x_0_ende[0]; x_0[1] = x_0_ende[1];
- /* Laufen rueckwaerts von x_0_ende nach x_0_anf. */
+    x_0[0] = x_0_ende[0];
+    x_0[1] = x_0_ende[1];
+    /* Laufen rueckwaerts von x_0_ende nach x_0_anf. */
 
- compute_tile_params (step);
+    compute_tile_params(step);
 
- /* Erster Schleifendurchlauf. Hier rechnen wir LLL mit viel Precision.
-    Auszerdem wird y_0 initialisiert. */
- init (v, y_0, x_0,
-           half_step, tile_offset, half_tilewidth, UPPER_BOUND);
- y_inv_init (y_0);
- y_diff[0] = 0; y_diff[1] = 0; y_inv_diff[0] = 0; y_inv_diff[1] = 0;
- /* y_diff = y_inv_diff = 0. */
- sprintf (output, "Init fertig.\n"); out ();
+    /* Erster Schleifendurchlauf. Hier rechnen wir LLL mit viel Precision.
+       Auszerdem wird y_0 initialisiert. */
+    init(v, y_0, x_0, half_step, tile_offset, half_tilewidth, UPPER_BOUND);
+    y_inv_init(y_0);
+    y_diff[0] = 0;
+    y_diff[1] = 0;
+    y_inv_diff[0] = 0;
+    y_inv_diff[1] = 0;
+    /* y_diff = y_inv_diff = 0. */
+    sprintf(output, "Init fertig.\n");
+    out();
 
- /* Scheife. Hier reicht fuer fast alles die Genauigkeit von double. */
- zaehler = FLIESE_NEU; tiles = -FLIESE_NEU; err = 0;
- /* while (x_0 >= x_0_anf) ... . */
- while ((x_0[1] > x_0_anf[1]) ||
-       ((x_0[1] == x_0_anf[1]) && (x_0[0] >= x_0_anf[0]))) {
-  /* mpf_set_mpx (tmp1, x_0);
-  gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
+    /* Scheife. Hier reicht fuer fast alles die Genauigkeit von double. */
+    zaehler = FLIESE_NEU;
+    tiles = -FLIESE_NEU;
+    err = 0;
+    /* while (x_0 >= x_0_anf) ... . */
+    while ((x_0[1] > x_0_anf[1]) ||
+           ((x_0[1] == x_0_anf[1]) && (x_0[0] >= x_0_anf[0])))
+    {
+        /* mpf_set_mpx (tmp1, x_0);
+        gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
 
-  compute_y_value (y_0);
-  /* Beim ersten Mal ist y_diff = 0 => y_0 wird richtig ausgerechnet. */
-  /* mpf_set_mpx (tmp1, y_0);
-  gmp_sprintf (output, "y_0 = %.*Ff.\n\n", 40, tmp1); out (); */
-  berechne_y_strich (y_0);
-  /* Beim ersten Mal ist y_inv_diff = 0 => y'(x_0) wird richtig ausgerechnet. */
-  /* mpf_set_mpx (tmp1, Ax);
-  gmp_sprintf (output, "A = %.*Ff.\n\n", 40, tmp1); out (); */
+        compute_y_value(y_0);
+        /* Beim ersten Mal ist y_diff = 0 => y_0 wird richtig ausgerechnet. */
+        /* mpf_set_mpx (tmp1, y_0);
+        gmp_sprintf (output, "y_0 = %.*Ff.\n\n", 40, tmp1); out (); */
+        berechne_y_strich(y_0);
+        /* Beim ersten Mal ist y_inv_diff = 0 => y'(x_0) wird richtig
+         * ausgerechnet. */
+        /* mpf_set_mpx (tmp1, Ax);
+        gmp_sprintf (output, "A = %.*Ff.\n\n", 40, tmp1); out (); */
 
-  if (zaehler == FLIESE_NEU) {
-   zaehler = 0; tiles += FLIESE_NEU;
-   compute_tile_params (step);
-   y_inv_init (y_0); y_diff_init (y_0, step);
-  }
+        if (zaehler == FLIESE_NEU)
+        {
+            zaehler = 0;
+            tiles += FLIESE_NEU;
+            compute_tile_params(step);
+            y_inv_init(y_0);
+            y_diff_init(y_0, step);
+        }
 
-  /* Letztes v war nicht korrekt wegen Overflow. */
-  if (err > 0) {
-   init (v, y_0, x_0,
-           half_step, tile_offset, half_tilewidth, UPPER_BOUND);
-   mpf_set_mpx (tmp1, x_0);
-   gmp_sprintf (output, "Neustart bei x_0 = %.*Ff.\n", 25, tmp1); out ();
-  }
+        /* Letztes v war nicht korrekt wegen Overflow. */
+        if (err > 0)
+        {
+            init(v, y_0, x_0, half_step, tile_offset, half_tilewidth,
+                 UPPER_BOUND);
+            mpf_set_mpx(tmp1, x_0);
+            gmp_sprintf(output, "Neustart bei x_0 = %.*Ff.\n", 25, tmp1);
+            out();
+        }
 
-  compute_three_linearf (lf, v, y_0, half_tilewidth, UPPER_BOUND);
+        compute_three_linearf(lf, v, y_0, half_tilewidth, UPPER_BOUND);
 
-  lll (lf, e);
-  err = matrix_prod (v, e, v); /* v ist auf jeden Fall richtig modulo 2**64. */
- 
-  lf_neu (ln, lf, e);
-  anz = kleine_vect (ln, v);
-  /* sprintf (output, "Finden %ld Gitterpunkte.\n", anz); out (); */
+        lll(lf, e);
+        err = matrix_prod(v, e,
+                          v); /* v ist auf jeden Fall richtig modulo 2**64. */
 
-  /* Fliesen gehen von x_0 nach rechts und links. */
-  mpx_sub (x_0, x_0, step); zaehler++;
- }
+        lf_neu(ln, lf, e);
+        anz = kleine_vect(ln, v);
+        /* sprintf (output, "Finden %ld Gitterpunkte.\n", anz); out (); */
 
- sprintf (output, "Insgesamt %ld Fliesen behandelt.\n", tiles + zaehler);
- out ();
+        /* Fliesen gehen von x_0 nach rechts und links. */
+        mpx_sub(x_0, x_0, step);
+        zaehler++;
+    }
+
+    sprintf(output, "Insgesamt %ld Fliesen behandelt.\n", tiles + zaehler);
+    out();
 }
-
 
 /* Wir wollen mit etwas wie
       elkies_allg 0.4 0.000001
@@ -970,30 +1036,35 @@ void rechne_intervall (mpx_t x_0_anf, mpx_t x_0_ende) {
 
    Dabei ist 0.4 der Anfangswert.
    0.000001 ist die Intervalllaenge, die der Prozessor schaffen soll. */
-int main (int argc, char *argv[]) {
- mpx_t   diff, x_0_anf, x_0_ende;
+int main(int argc, char *argv[])
+{
+    mpx_t diff, x_0_anf, x_0_ende;
 
- mpf_set_default_prec (128);
- mpf_init (tmp1); mpf_init (tmp2);
+    mpf_set_default_prec(128);
+    mpf_init(tmp1);
+    mpf_init(tmp2);
 
- mpf_set_str (tmp1, argv[1], 10); mpx_set_mpf (x_0_anf, tmp1);
- mpf_set_str (tmp2, argv[2], 10); mpx_set_mpf (diff, tmp2);
+    mpf_set_str(tmp1, argv[1], 10);
+    mpx_set_mpf(x_0_anf, tmp1);
+    mpf_set_str(tmp2, argv[2], 10);
+    mpx_set_mpf(diff, tmp2);
 
- row = 1;
- mpx_add (x_0_ende, x_0_anf, diff);
+    row = 1;
+    mpx_add(x_0_ende, x_0_anf, diff);
 
- /* Name der Ausgabedatei */
- mpf_set_mpx (tmp1, x_0_anf); mpf_set_mpx (tmp2, x_0_ende);
- gmp_sprintf (file, "liste_allg_%.*Ff_%.*Ff.txt", 8, tmp1, 8, tmp2);
+    /* Name der Ausgabedatei */
+    mpf_set_mpx(tmp1, x_0_anf);
+    mpf_set_mpx(tmp2, x_0_ende);
+    gmp_sprintf(file, "liste_allg_%.*Ff_%.*Ff.txt", 8, tmp1, 8, tmp2);
 
- /* Erste Ausgabe */
- gmp_sprintf (output, "Starte Rechnung von %.*Ff bis %.*Ff.\n",
-                                                      15, tmp1, 15, tmp2);
- out ();
+    /* Erste Ausgabe */
+    gmp_sprintf(output, "Starte Rechnung von %.*Ff bis %.*Ff.\n", 15, tmp1, 15,
+                tmp2);
+    out();
 
- rechne_intervall (x_0_anf, x_0_ende);
+    rechne_intervall(x_0_anf, x_0_ende);
 
- mpf_clear (tmp1); mpf_clear (tmp2);
- return 0;
+    mpf_clear(tmp1);
+    mpf_clear(tmp2);
+    return 0;
 }
-
