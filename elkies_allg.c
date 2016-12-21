@@ -42,11 +42,11 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 #include<math.h>
 #include"festkomma.h"
 
-#define        SUCHWEITE         1.0e14
-#define        UNTERSCHRANKE     1.0e11
+#define        UPPER_BOUND         1.0e14
+#define        LOWER_BOUND     1.0e11
 
-/* Tripel mit |x**3 + y**3 - z**3| < AUSGABE_SCHRANKE werden ausgegeben. */
-#define        AUSGABE_SCHRANKE  1000
+/* Tripel mit |x**3 + y**3 - z**3| < MAX_K werden ausgegeben. */
+#define        MAX_K  1000
 
 
 /* Die globalen Variablen halbe_schrittweite, halbe_fliesenbreite und
@@ -64,8 +64,8 @@ WWW     http://www.uni-math.gwdg.de/jahnel
       y(x) := (1 - x**3)**(1/3).
    Der Inhalt der Fliese ist damit 1.001 * y''(x) * halbe_schrittweite**3.
 
-   Dieser Wert wird als 1.001 * (FAKTOR/SUCHWEITE)**3 angesetzt.
-   Aus FAKTOR, SUCHWEITE und der aktuellen zweiten Ableitung sind somit
+   Dieser Wert wird als 1.001 * (FAKTOR/UPPER_BOUND)**3 angesetzt.
+   Aus FAKTOR, UPPER_BOUND und der aktuellen zweiten Ableitung sind somit
    halbe_schrittweite und halbe_fliesenbreite berechenbar. */
 #define        FLIESE_NEU        1000000
 #define        FAKTOR            5.5
@@ -89,7 +89,7 @@ mpf_t                                tmp1, tmp2;
 /* Nur ein Prototyp. */
 void init (long v[3][3], mpx_t y_0_type, mpx_t x_0_type,
   double halbe_schrittweite, mpx_t fliesenversatz,
-  double halbe_fliesenbreite, double suchweite);
+  double halbe_fliesenbreite, double upper_bound);
 
 
 void out () {
@@ -166,15 +166,15 @@ void berechne_fliesenformat (mpx_t schrittweite) {
  }
 
  zweite_abl = 2*x / pow (1 - x*x*x, 5.0/3.0);
- halbe_schrittweite = pow (zweite_abl, -1.0/3.0) * FAKTOR / SUCHWEITE;
+ halbe_schrittweite = pow (zweite_abl, -1.0/3.0) * FAKTOR / UPPER_BOUND;
 
- zusatzsummand = AUSGABE_SCHRANKE
-                              / (UNTERSCHRANKE * UNTERSCHRANKE * UNTERSCHRANKE);
+ zusatzsummand = MAX_K
+                              / (LOWER_BOUND * LOWER_BOUND * LOWER_BOUND);
  halbe_fliesenbreite =  1.001 * zweite_abl *
                                 halbe_schrittweite*halbe_schrittweite / 4
                       + zusatzsummand;
                      /* Zusatzsummand soll sicherstellen, dass Loesungen mit
-                        Hoehe >UNTERSCHRANKE garantiert gefunden werden. */
+                        Hoehe >LOWER_BOUND garantiert gefunden werden. */
  if (fl == 0) {
   sprintf (ausg, "halbe_schrittweite = %.9e, halbe_fliesenbreite = %.9e.\n",
                                halbe_schrittweite, halbe_fliesenbreite);
@@ -782,7 +782,7 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
  /* Rechnen in kleine_vect nur den Fall z >= 0.
  Deshalb brauchen wir an dieser Stelle plus und minus.
  Ausgabe natuerlich als signed long ints. */
- if ((f0 < AUSGABE_SCHRANKE) || (-f0 < AUSGABE_SCHRANKE))
+ if ((f0 < MAX_K) || (-f0 < MAX_K))
   if (f0 != 0)
    post_proc (vec_out0, vec_out1, vec_out2, f0); /* Ausgabe */
 
@@ -799,7 +799,7 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
                                                                             \
    x = x_anf;                                                               \
    /* Dieser Funktionsaufruf verursacht eine Ausgabe, falls f0 oder -f0     \
-   unterhalb der AUSGABE_SCHRANKE liegt. */                                 \
+   unterhalb der MAX_K liegt. */                                 \
    f0 = ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2);       \
    anz++;                                                                   \
                                                                             \
@@ -830,7 +830,7 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
      exit (0);                                                              \
     } */                                                                    \
     anz++;                                                                  \
-    if ((f < AUSGABE_SCHRANKE) || (-f < AUSGABE_SCHRANKE))                  \
+    if ((f < MAX_K) || (-f < MAX_K))                  \
      /* Dient nur der Ausgabe. Rechnen den Funktionswert ueberfluessigerweise
      nochmals aus. Ist schneller als eine extra Funktion aufzurufen. */     \
      ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2);          \
@@ -911,7 +911,7 @@ void rechne_intervall (mpx_t x_0_anf, mpx_t x_0_ende) {
  /* Erster Schleifendurchlauf. Hier rechnen wir LLL mit viel Precision.
     Auszerdem wird y_0 initialisiert. */
  init (v, y_0, x_0,
-           halbe_schrittweite, fliesenversatz, halbe_fliesenbreite, SUCHWEITE);
+           halbe_schrittweite, fliesenversatz, halbe_fliesenbreite, UPPER_BOUND);
  y_inv_init (y_0);
  y_diff[0] = 0; y_diff[1] = 0; y_inv_diff[0] = 0; y_inv_diff[1] = 0;
  /* y_diff = y_inv_diff = 0. */
@@ -943,12 +943,12 @@ void rechne_intervall (mpx_t x_0_anf, mpx_t x_0_ende) {
   /* Letztes v war nicht korrekt wegen Overflow. */
   if (err > 0) {
    init (v, y_0, x_0,
-           halbe_schrittweite, fliesenversatz, halbe_fliesenbreite, SUCHWEITE);
+           halbe_schrittweite, fliesenversatz, halbe_fliesenbreite, UPPER_BOUND);
    mpf_set_mpx (tmp1, x_0);
    gmp_sprintf (ausg, "Neustart bei x_0 = %.*Ff.\n", 25, tmp1); out ();
   }
 
-  berechne_drei_linearf (lf, v, y_0, halbe_fliesenbreite, SUCHWEITE);
+  berechne_drei_linearf (lf, v, y_0, halbe_fliesenbreite, UPPER_BOUND);
 
   lll (lf, e);
   err = matrix_prod (v, e, v); /* v ist auf jeden Fall richtig modulo 2**64. */

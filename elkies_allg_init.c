@@ -234,7 +234,7 @@ inline void lll_mpf (mpf_class l[3][3], long vec[3][3]) {
    Berechnet auszerdem einen Startwert fuer y_0. */
 void init (long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt,
   double halbe_schrittweite, mpx_t fliesenversatz,
-  double halbe_fliesenbreite, double suchweite) {
+  double halbe_fliesenbreite, double upper_bound) {
  mpf_set_default_prec (192);
  mpf_class  x_0, y_0;
  mpf_class   l[3][3];
@@ -257,7 +257,7 @@ void init (long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt,
 
  berechne_drei_linearf_mpf
    (l, e, x_0, y_0, halbe_schrittweite, fliesenversatz,
-    halbe_fliesenbreite, suchweite);
+    halbe_fliesenbreite, upper_bound);
 
  lll_mpf (l, v);
  /* printf ("v[0] = (%ld, %ld, %ld)\n", v[0][0], v[0][1], v[0][2]);
