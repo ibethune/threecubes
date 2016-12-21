@@ -41,11 +41,11 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 #include <math.h>
 #include "festkomma.h"
 
-#define UPPER_BOUND 3.0e14 // 1.0e14
-#define LOWER_BOUND 6.0e13 // 1.0e11
+#define UPPER_BOUND 1.0e14
+#define LOWER_BOUND 1.0e11
 
 /* Triples with |x**3 + y**3 - z**3| < MAX_K are allowed. */
-#define MAX_K 75 //1000
+#define MAX_K 1000
 
 /* The global variables half_step, half_tilewidth und
    tile_offset are calculated in compute_tile_params().
