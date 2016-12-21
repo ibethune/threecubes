@@ -29,4 +29,4 @@ elkies_allg: $(OBJ)
 #	strip elkies_allg
 
 clean:	
-	rm -rf *.o
+	rm -rf *.o elkies_allg

@@ -30,7 +30,6 @@ LOWER_BOUND and at most UPPER_BOUND.
 The upper bound (0.794) should be close to 0.5**(1/3) but above that number.
 The lower bound should be near zero but bigger than (3/UPPER_BOUND)**(1/3).
 
-
 SOME DOCUMENTATION (translated from German by IainB):
 
 Search for solutions to
@@ -41,21 +40,21 @@ This code is an implementation of Elkies' Method.
 
 This works as follows:
 x_0 runs from 0 (actually about 1.0e-5) to 1/\sqrt[3]{2} in steps of size
-2*halbe_schrittweite. (half_step)
+2*half_step.
 
 The current interval is:
-       [x_0 - halbe_schrittweite, x_0 + halbe_schrittweite].
+       [x_0 - half_step, x_0 + half_step].
 We consider a parallelogram, the "tile", which contains 
 the curve y = (1 - x**3)**(1/3) in this interval
 
 
 The half tile-width is:
-       y''(\xi) * halbe_schrittweite**2 / 4
+       y''(\xi) * half_step**2 / 4
 Where \xi lies in the range:
-       \xi \in [x_0 - halbe_schrittweite, x_0 + halbe_schrittweite].
+       \xi \in [x_0 - half_step, x_0 + half_step].
 Adding a little margin, the half tile-width is 
-       halbe_fliesenbreite :=  1.001 * y''(x_0) * halbe_schrittweite**2 / 4
-                             + zusatzsummand (extra)
+       half_tilewidth :=  1.001 * y''(x_0) * half_step**2 / 4
+                             + padding
 Something gets renews every FLIESE_NEU tiles (unclear, original German is)
 an und erneuern die Rechnung alle FLIESE_NEU Fliesen.
 
@@ -69,17 +68,17 @@ Thus
 |Y'| has an upper bound of 1.  Thus the distance of the a point from the curve 
 is at most
        k/z**3.
-We take zusatzsummand := 1.0e-30. This should guarantee that all
+We take padding := 1.0e-30. This should guarantee that all
 solutions of size >10**11 for k < 1000 are found.
 
 The upper and lower sides of the parallelogram have slope y'(x_0).
 The curve y = (1 - x**3)**(1/3) always lies below this tangent
 We set the tile offset
-       fliesenversatz := y''(x_0) * halbe_schrittweite**2 / 4
+       tile_offset := y''(x_0) * half_step**2 / 4
 And choose
        y = Ax + B
 as the center-line of the tile, where A is defined as := y'(x_0) and B is given by
-       y (x_0) = A*x_0 + B + fliesenversatz
+       y (x_0) = A*x_0 + B + tile_offset
 
 If x**3 + y**3 = z**3 + k and since x, y und z are not too small
 (x/z, y/z) are very close to the curve y = (1 - x**3)**(1/3).
@@ -87,22 +86,22 @@ That means (x/z, y/z)  occurs once in the loop over x_0 within a tile. */ /*
 
 We search for rational points within a tile with |z| < UPPER_BOUND.
 (x/z, y/z) lies in the tile exactly when
-       |x/z - x_0| < halbe_schrittweite (half-step)
+       |x/z - x_0| < half_step (half-step)
 and
-       |y/z - A*x/z - B| < halbe_fliesenbreite (half-tilewidth)
+       |y/z - A*x/z - B| < half_tilewidth (half-tilewidth)
 hold.
 
-This implies
+Since
 (1)    |z / UPPER_BOUND| < 1
-and (relaxed slightly)
-       |x - x_0 * z| < halbe_schrittweite * z < halbe_schrittweite * UPPER_BOUND,
-also
-(2)    |(x - x_0 * z) / (halbe_schrittweite * UPPER_BOUND)| < 1
+then (relaxed slightly)
+       |x - x_0 * z| < half_step * z < half_step * UPPER_BOUND,
+or
+(2)    |(x - x_0 * z) / (half_step * UPPER_BOUND)| < 1
 as well as (also relaxed)
-       |y - A*x - B*z| < halbe_fliesenbreite * z
-                       < halbe_fliesenbreite * UPPER_BOUND,
+       |y - A*x - B*z| < half_tilewidth * z
+                       < half_tilewidth * UPPER_BOUND,
 also
-(3)    |(y - A*x - B*z) / (halbe_fliesenbreite * UPPER_BOUND)| < 1.
+(3)    |(y - A*x - B*z) / (half_tilewidth * UPPER_BOUND)| < 1.
 
 We this have three linear forms l1, l2 and l3, each of which is less than 1.
 

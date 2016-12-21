@@ -48,7 +48,7 @@ mpf_class  tmpxx (0, 128), Axx (0, 128), Bxx (0, 128);
  *****************************************************************************/
 
 /* y_0 := (1 - x_0**3)**(1/3). */
-void berechne_y_wert_mpf (mpf_class x_0, mpf_class &y_0) {
+void compute_y_value_mpf (mpf_class x_0, mpf_class &y_0) {
  mpf_class  tmp;
 
  tmp = 1 - x_0*x_0*x_0;
@@ -62,9 +62,9 @@ void berechne_y_wert_mpf (mpf_class x_0, mpf_class &y_0) {
    Genauer wird li[j] = L_i (v_j) ausgerechnet.
    Besonders bei l[2] tritt extreme Ausloeschung auf, weshalb die hohe
    Genauigkeit gebraucht wird.*/
-void berechne_drei_linearf_mpf
+void compute_three_linearf_mpf
    (mpf_class l[3][3], long v[3][3], mpf_class x_0, mpf_class y_0,
-    double halbe_schrittweite, mpx_t fliesenversatz, double d, double N) {
+    double half_step, mpx_t tile_offset, double d, double N) {
  long  i;
 
  Axx = - x_0*x_0 / (y_0*y_0);
@@ -74,14 +74,14 @@ void berechne_drei_linearf_mpf
  /* A = (y_1 - y_0) / (x_1 - x_0); */
  /* A = - x_0*x_0 / pow (1 - x_0*x_0*x_0, 2.0/3.0); */
 
- Bxx = y_0 - mpx_get_d (fliesenversatz) - Axx * x_0;
+ Bxx = y_0 - mpx_get_d (tile_offset) - Axx * x_0;
  /* gmp_printf ("x_0 = %.*Ff.\n", 40, x_0.get_mpf_t ());
  gmp_printf ("A = %.*Ff, B = %.*Ff.\n",
              40, Axx.get_mpf_t (), 40, Bxx.get_mpf_t ()); */
 
  for (i = 0; i < 3; i++) {
   l[0][i] = v[i][2] / N;     /* l0 (vi)*/
-  l[1][i] = (v[i][0] - v[i][2] * x_0) / (halbe_schrittweite * N);
+  l[1][i] = (v[i][0] - v[i][2] * x_0) / (half_step * N);
   l[2][i] = (v[i][1] - Axx * v[i][0] - Bxx * v[i][2]) / (d*N);
  }
 }
@@ -233,8 +233,8 @@ inline void lll_mpf (mpf_class l[3][3], long vec[3][3]) {
 /* Rechnet einen Satz kurzer Vektoren fuer die erste Fliese aus. 
    Berechnet auszerdem einen Startwert fuer y_0. */
 void init (long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt,
-  double halbe_schrittweite, mpx_t fliesenversatz,
-  double halbe_fliesenbreite, double upper_bound) {
+  double half_step, mpx_t tile_offset,
+  double half_tilewidth, double upper_bound) {
  mpf_set_default_prec (192);
  mpf_class  x_0, y_0;
  mpf_class   l[3][3];
@@ -244,7 +244,7 @@ void init (long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt,
  mpf_set_mpx (x_0.get_mpf_t (), x_0_xt);
  /* gmp_printf ("x_0 = %.*Ff.\n", 15, x_0.get_mpf_t ()); */
 
- berechne_y_wert_mpf (x_0, y_0);
+ compute_y_value_mpf (x_0, y_0);
  /* gmp_printf ("y_0 = %.*Ff.\n\n", 15, y_0.get_mpf_t ()); */
  mpx_set_mpf (y_0_xt, y_0.get_mpf_t ());
 
@@ -255,9 +255,9 @@ void init (long v[3][3], mpx_t y_0_xt, mpx_t x_0_xt,
  for (i = 0; i < 3; i++)
   e[i][i] = 1;
 
- berechne_drei_linearf_mpf
-   (l, e, x_0, y_0, halbe_schrittweite, fliesenversatz,
-    halbe_fliesenbreite, upper_bound);
+ compute_three_linearf_mpf
+   (l, e, x_0, y_0, half_step, tile_offset,
+    half_tilewidth, upper_bound);
 
  lll_mpf (l, v);
  /* printf ("v[0] = (%ld, %ld, %ld)\n", v[0][0], v[0][1], v[0][2]);

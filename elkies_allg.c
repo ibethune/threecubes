@@ -42,70 +42,69 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 #include<math.h>
 #include"festkomma.h"
 
-#define        UPPER_BOUND         1.0e14
+#define        UPPER_BOUND     1.0e14
 #define        LOWER_BOUND     1.0e11
 
-/* Tripel mit |x**3 + y**3 - z**3| < MAX_K werden ausgegeben. */
+/* Triples with |x**3 + y**3 - z**3| < MAX_K are allowed. */
 #define        MAX_K  1000
 
 
-/* Die globalen Variablen halbe_schrittweite, halbe_fliesenbreite und
-   fliesenversatz werden in berechne_fliesenformat errechnet.
-   Diese Funktion wird alle FLIESE_NEU Durchlaeufe der aeuszeren Schleife
-   aufgerufen.
-   Der FAKTOR regelt dabei die Groesze der Fliese.
+/* The global variables half_step, half_tilewidth und
+   tile_offset are calculated in compute_tile_params().
 
-   Beachte, dabei:
-   halbe_schrittweite ist die halbe Ausdehnung einer Fliese in x-Richtung.
-   halbe_fliesenbreite ist die halbe Ausdehnung einer Fliese in y-Richtung.
-   Es muss gelten:
-      halbe_fliesenbreite = 1.001 * y''(x) * halbe_schrittweite**2 / 4
-   mit
+   This function will perform all FLEISE_NEU iterations of the
+   outermost loop.
+   The FACTOR controls the size of the tile.
+
+   NB:
+   half_step is the half-dimension of a tile in the x-direction.
+   half_tilewidth is the half-dimension of a tile in the y-direction.
+   It is defined as:
+      half_tilewidth = 1.001 * y''(x) * half_step**2 / 4
+   wthere
       y(x) := (1 - x**3)**(1/3).
-   Der Inhalt der Fliese ist damit 1.001 * y''(x) * halbe_schrittweite**3.
+   The area of the tile is thus 1.001 * y''(x) * half_step**3.
 
-   Dieser Wert wird als 1.001 * (FAKTOR/UPPER_BOUND)**3 angesetzt.
-   Aus FAKTOR, UPPER_BOUND und der aktuellen zweiten Ableitung sind somit
-   halbe_schrittweite und halbe_fliesenbreite berechenbar. */
+   This value is set as 1.001 * (FACTOR/UPPER_BOUND)**3.
+   Thus FACTOR, UPPER_BOUND and the current second derivative control the 
+   half_step und half_tilewidth calculation. */
 #define        FLIESE_NEU        1000000
-#define        FAKTOR            5.5
-double  halbe_schrittweite, halbe_fliesenbreite;
-mpx_t                   x_0, fliesenversatz, Ax;
-mpx_t                 y_diff, y_inv, y_inv_diff;
-char                      ausg[1000], file[100];
-long                                      zeile;
+#define        FACTOR            5.5
+double  half_step, half_tilewidth;
+mpx_t x_0, tile_offset, Ax;
+mpx_t y_diff, y_inv, y_inv_diff;
+char output[1000], file[100];
+long row;
 
 
-/* Zaehler fuer die Gesamtzahl der bearbeiteten Fliesen. */
-long                                    fliesen;
+/* Counter of the total number of processed tiles. */
+long                                    tiles;
 
-/* Diese mpf-Variablen sollten an sich lokale Variablen, hauptsaechlich in den
-   Funktionen berechne_y_wert und berechne_drei_linearf bzw.
-   berechne_drei_linearf_mpf, sein.
-   Mit globalen Variablen laeuft der Code aber schneller. */
-mpf_t                                tmp1, tmp2;
+/* These mpf variables should be locals, mainly in the
+   functions compute_y_value and compute_three_linearf or
+   compute_three_linearf_mpf.
+   The code runs faster with global variables. */
+mpf_t tmp1, tmp2;
 
 
-/* Nur ein Prototyp. */
+/* Just a prototype */
 void init (long v[3][3], mpx_t y_0_type, mpx_t x_0_type,
-  double halbe_schrittweite, mpx_t fliesenversatz,
-  double halbe_fliesenbreite, double upper_bound);
-
+  double half_step, mpx_t tile_offset,
+  double half_tilewidth, double upper_bound);
 
 void out () {
  FILE *fp;
 
  fp = fopen (file, "a");
- fprintf (fp, "%6ld \t ", zeile);
- zeile++;
- fprintf (fp, ausg);
+ fprintf (fp, "%6ld \t ", row);
+ row++;
+ fprintf (fp, output);
  fclose (fp);
 }
 
-
-/* pr := m1 * m2. Produkt zweier 3x3-Matrizen mit ganzzahligen Eintraegen.
-   Wir rechnen in long und achten auf overflow ueber \pm2**63.
-   pr = m1 und pr = m2 sind erlaubt. */
+/* pr := m1 * m2. Product of two 3x3 matrices with integer entries.
+   We compute in long integer and watch for overflows \pm 2**63.
+   pr = m1 or pr = m2 are allowed. */
 inline long matrix_prod (long pr[3][3],
                          long m1[3][3], long m2[3][3]) {
  long               i, j;
@@ -123,14 +122,14 @@ inline long matrix_prod (long pr[3][3],
    addf_ssaaaa (prodh, prod[i][j], prodh, prod[i][j], argh, argl);
    if (((prod[i][j] >= 0) && (prodh != 0))
      || ((prod[i][j] < 0) && (prodh != -1))) {
-    /* sprintf (ausg, "Overflow beim Matrizenprodukt. "); out ();
-       sprintf (ausg, " prod[i][j] = %ld, prodh = %ld.\n",
+    /* sprintf (output, "Overflow during matrix product. "); out ();
+       sprintf (output, " prod[i][j] = %ld, prodh = %ld.\n",
                                               prod[i][j], prodh); out ();
-    sprintf (ausg, "m1 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld %ld]\n",
+    sprintf (output, "m1 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld %ld]\n",
          m1[0][0], m1[0][1], m1[0][2],
          m1[1][0], m1[1][1], m1[1][2],
          m1[2][0], m1[2][1], m1[2][2]); out ();
-    sprintf (ausg, "m2 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld %ld]\n",
+    sprintf (output, "m2 = [%ld %ld %ld], [%ld %ld %ld], [%ld %ld %ld]\n",
          m2[0][0], m2[0][1], m2[0][2],
          m2[1][0], m2[1][1], m2[1][2],
          m2[2][0], m2[2][1], m2[2][2]); out (); */
@@ -138,8 +137,7 @@ inline long matrix_prod (long pr[3][3],
    }
   }
  }
- /* Umkopieren. Noetig fuer den Fall, dass pr an die Adresse von m1 oder m2
-    geschrieben werden soll. */
+ /* Copyback - needed for the case that pr is aliased to m1 or m2 */
  for (i = 0; i < 3; i++) {
   for (j = 0; j < 3; j++) {
    pr[i][j] = prod[i][j];
@@ -149,41 +147,41 @@ inline long matrix_prod (long pr[3][3],
 }
 
 
-/* Berechnung von halbe_schrittweite und halbe_fliesenbreite an der aktuellen
-   Stelle x_0 \in [0,1]. */
-void berechne_fliesenformat (mpx_t schrittweite) {
- double  x, zweite_abl, zusatzsummand;
- long                              fl;
+/* Compute half_step and half_tilewidth at the current
+   point x_0 \in [0,1]. */
+void compute_tile_params (mpx_t step) {
+ double x, second_derivative, padding;
+ long do_output;
 
- /* Output nur alle 100*FLIESE_NEU Fliesen. */
- fl = fliesen % (100 * FLIESE_NEU);
+ /* Output only every 100*FLIESE_NEU tiles. */
+ do_output = tiles % (100 * FLIESE_NEU);
 
  x = mpx_get_d (x_0);
 
- if (fl == 0) {
-  sprintf (ausg, "\n"); out ();
-  sprintf (ausg, "x_0 = %.15f.\n", x); out ();
+ if (do_output == 0) {
+  sprintf (output, "\n"); out ();
+  sprintf (output, "x_0 = %.15f.\n", x); out ();
  }
 
- zweite_abl = 2*x / pow (1 - x*x*x, 5.0/3.0);
- halbe_schrittweite = pow (zweite_abl, -1.0/3.0) * FAKTOR / UPPER_BOUND;
+ second_derivative = 2*x / pow (1 - x*x*x, 5.0/3.0);
+ half_step = pow (second_derivative, -1.0/3.0) * FACTOR / UPPER_BOUND;
 
- zusatzsummand = MAX_K
-                              / (LOWER_BOUND * LOWER_BOUND * LOWER_BOUND);
- halbe_fliesenbreite =  1.001 * zweite_abl *
-                                halbe_schrittweite*halbe_schrittweite / 4
-                      + zusatzsummand;
-                     /* Zusatzsummand soll sicherstellen, dass Loesungen mit
-                        Hoehe >LOWER_BOUND garantiert gefunden werden. */
- if (fl == 0) {
-  sprintf (ausg, "halbe_schrittweite = %.9e, halbe_fliesenbreite = %.9e.\n",
-                               halbe_schrittweite, halbe_fliesenbreite);
+ padding = MAX_K / (LOWER_BOUND * LOWER_BOUND * LOWER_BOUND);
+ half_tilewidth =  1.001 * second_derivative *
+                   half_step*half_step / 4
+                   + padding;
+                     /* padding chosen so that solutions of 
+                        size >LOWER_BOUND are guaranteed. */
+
+ if (do_output == 0) {
+  sprintf (output, "half_step = %.9e, half_tilewidth = %.9e.\n",
+                               half_step, half_tilewidth);
   out ();
  }
 
- mpx_set_d (schrittweite, 2 * halbe_schrittweite);
- mpx_set_d (fliesenversatz,
-                  zweite_abl * halbe_schrittweite*halbe_schrittweite / 4);
+ mpx_set_d (step, 2 * half_step);
+ mpx_set_d (tile_offset,
+                  second_derivative * half_step*half_step / 4);
 }
 
 
@@ -203,43 +201,43 @@ void y_inv_init (mpx_t y_0) {
  mpf_div (tmp1, tmp1, tmp2);
  mpf_sub_ui (tmp1, tmp1, 1);
  mpx_set_mpf (y_inv, tmp1);
- /* gmp_sprintf (ausg, "y_inv = %.*Ff.\n", 40, tmp1); */
+ /* gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
 }
 
 
 /* Wird einmal pro FLIESE_NEU Fliesen aufgerufen.
-   Initialisiert y_diff als y'(x_0) * schrittweite.
+   Initialisiert y_diff als y'(x_0) * step.
    Berechnet y_inv_diff als y_diff / y_0**2. */
-void y_diff_init (mpx_t y_0, mpx_t schrittweite) {
+void y_diff_init (mpx_t y_0, mpx_t step) {
  double  diff, y;
 
  /* Initialisierung von y_diff. */
- mpx_mul (y_diff, Ax, schrittweite);
+ mpx_mul (y_diff, Ax, step);
  /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
  if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
-  mpx_add (y_diff, y_diff, schrittweite);
+  mpx_add (y_diff, y_diff, step);
  /* mpf_set_mpx (tmp1, y_diff);
- gmp_sprintf (ausg, "y_diff = %.*Ff.\n\n", 40, tmp1); */
+ gmp_sprintf (output, "y_diff = %.*Ff.\n\n", 40, tmp1); */
 
  /* Initialisierung von y_inv_diff. */
  y = mpx_get_d (y_0);
  diff = mpx_get_d (y_diff) / (y*y);
  mpx_set_d (y_inv_diff, diff);
  /* mpf_set_mpx (tmp1, y_inv_diff);
- gmp_sprintf (ausg, "y_inv_diff = %.*Ff.\n", 40, tmp1); */
+ gmp_sprintf (output, "y_inv_diff = %.*Ff.\n", 40, tmp1); */
 }
 
 
 /* y_0 := (1 - x_0**3)**(1/3). */
-inline void berechne_y_wert (mpx_t y_0) {
+inline void compute_y_value (mpx_t y_0) {
  double        nenner, diff;
  mpx_t  tmpx1, tmpx2, tmpx3;
 
  mpx_add (y_0, y_0, y_diff);
- /* y_0 -= schrittweite * A. Lineare Verbesserung des Startwerts.
+ /* y_0 -= step * A. Lineare Verbesserung des Startwerts.
     Minus, weil wir rueckwaerts durch das Intervall laufen.
     y_diff wird einmal pro 1000000 Fliesen ausgerechnet.
-    A ist immer negativ, also (-schrittweite)*A > 0.
+    A ist immer negativ, also (-step)*A > 0.
     Beachte, y_diff > 0 nach Initialisierung. */
 
  mpx_mul (tmpx1, x_0, x_0);
@@ -255,7 +253,7 @@ inline void berechne_y_wert (mpx_t y_0) {
  mpx_sub (tmpx1, tmpx2, tmpx3);
  diff = mpx_get_d (tmpx1);
  if (diff > 0.5) {
-  sprintf (ausg, "Underflow.\n"); out ();
+  sprintf (output, "Underflow.\n"); out ();
   exit (0);
  }
  diff /= nenner;
@@ -270,7 +268,7 @@ inline void berechne_y_wert (mpx_t y_0) {
  /* Eine Newton-Iteration. */
 
  /* mpf_set_mpx (tmp1, y_0);
- gmp_sprintf (ausg, "y_0 = %.*Ff.\n", 40, tmp1); out (); */
+ gmp_sprintf (output, "y_0 = %.*Ff.\n", 40, tmp1); out (); */
 }
 
 
@@ -297,7 +295,7 @@ inline void berechne_y_strich (mpx_t y_0) {
  /* tmpx1 ist (1 - y_0 - y_0 * y_inv) + (1 - y_0 - y_0 * y_inv) * y_inv. */
  mpx_add (y_inv, y_inv, tmpx1);
  /* mpf_set_mpx (tmp1, y_inv);
- gmp_sprintf (ausg, "y_inv = %.*Ff.\n", 40, tmp1); */
+ gmp_sprintf (output, "y_inv = %.*Ff.\n", 40, tmp1); */
 
  /* Berechne jetzt 
          y'(x_0) = Ax := x_0**2 / y_0**2
@@ -310,7 +308,7 @@ inline void berechne_y_strich (mpx_t y_0) {
  mpx_mul (Ax, tmpx2, tmpx1); /* Ax ist jetzt x_0**2 * (y_inv**2 + 2*y_inv). */
  mpx_add (Ax, Ax, tmpx2);
  /* mpf_set_mpx (tmp1, Ax);
- gmp_sprintf (ausg, "A = %.*Ff.\n", 40, tmp1); */
+ gmp_sprintf (output, "A = %.*Ff.\n", 40, tmp1); */
 
  /* Ax = - x_0*x_0 / (y_0*y_0); */
  /* Ableitung von
@@ -321,40 +319,40 @@ inline void berechne_y_strich (mpx_t y_0) {
 }
 
 
-inline void berechne_drei_linearf
+inline void compute_three_linearf
   (double l[3][3], long v[3][3], mpx_t y_0, double d, double N) {
  long                         i;
  mpx_t  tmpx1, tmpx2, tmpx3, Bx;
 
 
  /* mpf_set_mpx (tmp1, x_0);
- gmp_sprintf (ausg, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
+ gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
  mpx_mul (tmpx1, Ax, x_0);
  /* Im Falle y_0 < x_0 ist in Wirklichkeit Ax > 1. Korrigieren hier nach. */
  if ((y_0[1] < x_0[1]) || ((y_0[1] == x_0[1]) && (y_0[0] <= x_0[0])))
   mpx_add (tmpx1, tmpx1, x_0);
 
- /* mpf_set_mpx (tmp1, fliesenversatz);
- gmp_sprintf (ausg, "fliesenversatz = %.*Ff.\n", 40, tmp1); out (); */
- mpx_sub (tmpx2, y_0, fliesenversatz);
+ /* mpf_set_mpx (tmp1, tile_offset);
+ gmp_sprintf (output, "tile_offset = %.*Ff.\n", 40, tmp1); out (); */
+ mpx_sub (tmpx2, y_0, tile_offset);
  mpx_add (Bx, tmpx1, tmpx2); /* Ax ist in Wirklichkeit negativ. */
- /* Bx = y_0 - fliesenversatz - Ax * x_0; */
+ /* Bx = y_0 - tile_offset - Ax * x_0; */
  /* Es gilt 1 <= Bx <= 1.6. Speichern in Wirklichkeit Bx - 1. */
  /* mpf_set_mpx (tmp1, Ax); mpf_set_mpx (tmp2, Bx);
- gmp_sprintf (ausg, "A = %.*Ff.\nB = %.*Ff.\n", 40, tmp1, 40, tmp2); out (); */
+ gmp_sprintf (output, "A = %.*Ff.\nB = %.*Ff.\n", 40, tmp1, 40, tmp2); out (); */
 
  for (i = 0; i < 3; i++) {
   l[0][i] = v[i][2] / N;
-  /* sprintf (ausg, "l[0][%ld] = %f.\n", i, l[0][i]); out (); */
+  /* sprintf (output, "l[0][%ld] = %f.\n", i, l[0][i]); out (); */
   /* Hier keine Probleme mit der Genauigkeit. */
 
   mpx_mul_si (tmpx1, x_0, -v[i][2]);
   mpxb_add_si (tmpx2, tmpx1, v[i][0]);
   /* tmpx = v[i][0] - v[i][2] * x_0; */
   l[1][i] = mpxg_get_d_simple (tmpx2);
-  l[1][i] /= (halbe_schrittweite * N);
-  /* sprintf (ausg, "l[1][%ld] = %f.\n", i, l[1][i]); out (); */
-  /* Es ist schrittweite*N \approx 100.
+  l[1][i] /= (half_step * N);
+  /* sprintf (output, "l[1][%ld] = %f.\n", i, l[1][i]); out (); */
+  /* Es ist step*N \approx 100.
      Wir brauchen also tmp2 auf >2 (7?) Nachkommastellen.
      Hierfuer sollte double ausreichen.
      tmp2 ist auf 128 Bit, also >=23 Nachkommastellen genau. */
@@ -370,7 +368,7 @@ inline void berechne_drei_linearf
   /* tmpx = v[i][1] - Ax * v[i][0] - Bx * v[i][2]; */
   l[2][i] = mpxg_get_d (tmpx1);
   l[2][i] /= (d*N);
-  /* sprintf (ausg, "l[2][%ld] = %f.\n", i, l[2][i]); out (); */
+  /* sprintf (output, "l[2][%ld] = %f.\n", i, l[2][i]); out (); */
   /* l[2][i] reagiert am sensibelsten auf zu wenig Precision.
      Es ist d*N \approx 1.0e-15.
      Wir brauchen also tmp2 auf > 15 (20?) Dezimalstellen hinter dem Komma.
@@ -404,7 +402,7 @@ do {                                                              \
  do {                                                             \
   long  t1;                                                       \
                                                                   \
-  /* sprintf (ausg, "Gram!\n"); out (); */                        \
+  /* sprintf (output, "Gram!\n"); out (); */                        \
   for (t1 = 0; t1 < 3; t1++)                                      \
    vec_gram[0][t1] = vec[0][t1];      /* double = long */         \
   scal_prod (B[0], l, vec_gram[0], vec_gram[0]);                  \
@@ -425,10 +423,10 @@ do {                                                              \
 
 #define red_k_k1()                                                \
  do {                                                             \
-  /* sprintf (ausg, "Mache RED (%ld, %ld).\n", k, k-1); out (); */\
+  /* sprintf (output, "Mache RED (%ld, %ld).\n", k, k-1); out (); */\
   tm = floor (mu[k][k-1] + 0.5);                                  \
   /* if (fabs (tm) > (1LU << 63) - 1) {                           \
-   sprintf (ausg, "q ist zu lang.\n"); out ();                    \
+   sprintf (output, "q ist zu lang.\n"); out ();                    \
    exit (0);                                                      \
   } */                                                            \
   q = lround (tm);                                                \
@@ -444,11 +442,11 @@ do {                                                              \
 
 #define red_2_0()                                                 \
  do {                                                             \
-  /* sprintf (ausg, "Mache RED (2, 0).\n"); out (); */            \
+  /* sprintf (output, "Mache RED (2, 0).\n"); out (); */            \
   tm = floor (mu[2][0] + 0.5);                                    \
   q = lround (tm);                                                \
   /* if (fabs (tm) > (1LU << 63) - 1) {                           \
-   sprintf (ausg, "q ist zu lang.\n"); out ();                    \
+   sprintf (output, "q ist zu lang.\n"); out ();                    \
    exit (0);                                                      \
   } */                                                            \
   if (q != 0)                                                     \
@@ -459,7 +457,7 @@ do {                                                              \
 
 #define lll_swap()                                                \
 do {                                                              \
- /* sprintf (ausg, "Mache SWAP (%ld).\n", k); out (); */          \
+ /* sprintf (output, "Mache SWAP (%ld).\n", k); out (); */          \
  for (i = 0; i < 3; i++) {                                        \
   tmp = vec[k][i];                                                \
   vec[k][i] = vec[k-1][i];                                        \
@@ -517,13 +515,13 @@ inline void lll (double l[3][3], long vec[3][3]) {
  gram ();
 
  while (k < 3) {
-  /* sprintf (ausg, "%ld\n", k); out (); */
+  /* sprintf (output, "%ld\n", k); out (); */
   red_k_k1 ();
 
   /* Test LLL condition */
   if (B[k] < ((0.99 - mu[k][k-1]*mu[k][k-1]) * B[k-1])) {
   /* if (B[k] < 0.5 * B[k-1]) { */
-   /* sprintf (ausg, "Swap mit k = %ld \n", k); out (); */
+   /* sprintf (output, "Swap mit k = %ld \n", k); out (); */
    lll_swap ();
    /* out (); */
   }
@@ -606,7 +604,7 @@ inline void pyr_ecken
 
  /* Determinante */
  det_inv = 1.0 / (lf[0][0]*adj[0][0] + lf[0][1]*adj[1][0] + lf[0][2]*adj[2][0]);
- /* sprintf (ausg, "det_inv = %.15f\n", det_inv); out (); */
+ /* sprintf (output, "det_inv = %.15f\n", det_inv); out (); */
  /* Inverse */
  for (i = 0; i < 3; i++)
   for (j = 0; j < 3; j++)
@@ -620,11 +618,11 @@ inline void pyr_ecken
  pt4[1] = pt1[1] + pt3[1] - pt2[1];
  pt4[2] = pt1[2] + pt3[2] - pt2[2];
 
- /* sprintf (ausg, "Ecken:\n"); out ();
- sprintf (ausg, "pt1 = (%f, %f, %f)\n", pt1[0], pt1[1], pt1[2]); out ();
- sprintf (ausg, "pt2 = (%f, %f, %f)\n", pt2[0], pt2[1], pt2[2]); out ();
- sprintf (ausg, "pt3 = (%f, %f, %f)\n", pt3[0], pt3[1], pt3[2]); out ();
- sprintf (ausg, "pt4 = (%f, %f, %f)\n", pt4[0], pt4[1], pt4[2]); out (); */
+ /* sprintf (output, "Ecken:\n"); out ();
+ sprintf (output, "pt1 = (%f, %f, %f)\n", pt1[0], pt1[1], pt1[2]); out ();
+ sprintf (output, "pt2 = (%f, %f, %f)\n", pt2[0], pt2[1], pt2[2]); out ();
+ sprintf (output, "pt3 = (%f, %f, %f)\n", pt3[0], pt3[1], pt3[2]); out ();
+ sprintf (output, "pt4 = (%f, %f, %f)\n", pt4[0], pt4[1], pt4[2]); out (); */
 }
 
 
@@ -644,7 +642,7 @@ inline void z_schranken (long *z_anf, long *z_end,
  Dies ist aber kein Bug, weil wir ohnehin nur die Punkte im Innern der Pyramide
  brauchen. */
 
- /* sprintf (ausg, "z-Schranken: [%ld, %ld]\n", *z_anf, *z_end); out (); */
+ /* sprintf (output, "z-Schranken: [%ld, %ld]\n", *z_anf, *z_end); out (); */
 }
 
 
@@ -673,7 +671,7 @@ inline void kante (double *kante, double *anf, double *end) {
  kante[4] = (anf[0] - end[0]) * dz_inv; /* dx/dz */
  kante[5] = anf[0] - kante[4]*anf[2];
 
- /* sprintf (ausg, "Kante: y = %f*z + %f, x = %f*z + %f fuer %f <= z <= %f\n",
+ /* sprintf (output, "Kante: y = %f*z + %f, x = %f*z + %f fuer %f <= z <= %f\n",
                kante[2], kante[3], kante[4], kante[5], kante[0], kante[1]);
  out (); */
 }
@@ -730,7 +728,7 @@ inline void x_und_y_schranken
  *x_anf = lround (xanf + 0.5); /* Aufrunden. */
  *x_end = lround (xend - 0.5); /* Abrunden. */
 
- /* sprintf (ausg, "x_y-Schranken fuer z = %ld: [%ld, %ld] x [%ld, %ld]\n",
+ /* sprintf (output, "x_y-Schranken fuer z = %ld: [%ld, %ld] x [%ld, %ld]\n",
                                          z, *x_anf, *x_end, *y_anf, *y_end);
  out (); */
 }
@@ -741,19 +739,19 @@ void post_proc (long vec_out0, long vec_out1, long vec_out2, long f0) {
  /* double  quot, x0, x1; */
 
  /* quot = ((double) vec_out0) / ((double) vec_out2); */
- /* sprintf (ausg, "%.18f\n", quot); out (); */
+ /* sprintf (output, "%.18f\n", quot); out (); */
 
  /* x0 = mpx_get_d (x_0);
- x0 -= halbe_schrittweite;
- x1 = x0 + 2 * halbe_schrittweite; */
- /* sprintf (ausg, "Intervall [%.18f,%.18f]\n\n", x0, x1); out (); */
+ x0 -= half_step;
+ x1 = x0 + 2 * half_step; */
+ /* sprintf (output, "Intervall [%.18f,%.18f]\n\n", x0, x1); out (); */
 
  /* if ((x0 < quot) && (x1 > quot)) */ {
-  sprintf (ausg, "(%ld, %ld, %ld) Loesung fuer k = %ld.\n",
+  sprintf (output, "(%ld, %ld, %ld) Loesung fuer k = %ld.\n",
                                           vec_out0, vec_out1, vec_out2, f0);
   out ();
-  sprintf (ausg, "\n"); out ();
-  /* sprintf (ausg, "Loesung gefunden.\n"); out (); */
+  sprintf (output, "\n"); out ();
+  /* sprintf (output, "Loesung gefunden.\n"); out (); */
   /* exit (0); */
  }
 }
@@ -768,7 +766,7 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
  long  vec_out0, vec_out1, vec_out2;
  ulong                           f0;
 
- /* sprintf (ausg, "x = %ld.\n", x); out (); */
+ /* sprintf (output, "x = %ld.\n", x); out (); */
 
  vec_out0 = x * v00 + vec_h0; /* Waere hier Rechnung in ulong logischer? */
  vec_out1 = x * v01 + vec_h1; /* Haben sowieso keinen Overflow. */
@@ -792,7 +790,7 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
 
 #define XY_SCHLEIFE {                                                       \
   for (y = y_anf; y <= y_end; y++) {                                        \
-   /* sprintf (ausg, "Rechne y = %ld.\n", y); out (); */                    \
+   /* sprintf (output, "Rechne y = %ld.\n", y); out (); */                    \
    vec_h0 = y * v[1][0] + z * v[2][0];                                      \
    vec_h1 = y * v[1][1] + z * v[2][1];                                      \
    vec_h2 = y * v[1][2] + z * v[2][2];                                      \
@@ -823,10 +821,10 @@ inline ulong ein_funktionswert (long x, long v00, long v01, long v02,
     dd += ddd;                                                              \
     f  += d;                                                                \
     /* if (f != ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2)) {\
-     sprintf (ausg, "%lu %lu\n", f,                                         \
+     sprintf (output, "%lu %lu\n", f,                                         \
                  ein_funktionswert (x, v00, v01, v02, vec_h0, vec_h1, vec_h2));\
      out ();
-     sprintf (ausg, "Bug im Differenzenschema!\n"); out ();                 \
+     sprintf (output, "Bug im Differenzenschema!\n"); out ();                 \
      exit (0);                                                              \
     } */                                                                    \
     anz++;                                                                  \
@@ -859,12 +857,12 @@ inline long kleine_vect (double lf[3][3], long v[3][3]) {
  ulong                f, f0, f1, f2;
  ulong               d, dd, ddd, d1;
 
- /* sprintf (ausg, "lll-Basis:\n[%ld %ld %ld],\n[%ld %ld %ld],\n[%ld %ld %ld]\n",
+ /* sprintf (output, "lll-Basis:\n[%ld %ld %ld],\n[%ld %ld %ld],\n[%ld %ld %ld]\n",
            v[0][0], v[0][1], v[0][2],
            v[1][0], v[1][1], v[1][2],
            v[2][0], v[2][1], v[2][2]);
  out ();
- sprintf (ausg, "Linearformen auf dem ersten Vektor: %f %f %f\n",
+ sprintf (output, "Linearformen auf dem ersten Vektor: %f %f %f\n",
                                                lf[0][0], lf[1][0], lf[2][0]);
  out (); */
 
@@ -897,7 +895,7 @@ inline long kleine_vect (double lf[3][3], long v[3][3]) {
 
 /* Init. Die aeuszere Schleife. */
 void rechne_intervall (mpx_t x_0_anf, mpx_t x_0_ende) {
- mpx_t         schrittweite;
+ mpx_t         step;
  mpx_t                  y_0;
  double  lf[3][3], ln[3][3];
  long      e[3][3], v[3][3];
@@ -906,62 +904,62 @@ void rechne_intervall (mpx_t x_0_anf, mpx_t x_0_ende) {
  x_0[0] = x_0_ende[0]; x_0[1] = x_0_ende[1];
  /* Laufen rueckwaerts von x_0_ende nach x_0_anf. */
 
- berechne_fliesenformat (schrittweite);
+ compute_tile_params (step);
 
  /* Erster Schleifendurchlauf. Hier rechnen wir LLL mit viel Precision.
     Auszerdem wird y_0 initialisiert. */
  init (v, y_0, x_0,
-           halbe_schrittweite, fliesenversatz, halbe_fliesenbreite, UPPER_BOUND);
+           half_step, tile_offset, half_tilewidth, UPPER_BOUND);
  y_inv_init (y_0);
  y_diff[0] = 0; y_diff[1] = 0; y_inv_diff[0] = 0; y_inv_diff[1] = 0;
  /* y_diff = y_inv_diff = 0. */
- sprintf (ausg, "Init fertig.\n"); out ();
+ sprintf (output, "Init fertig.\n"); out ();
 
  /* Scheife. Hier reicht fuer fast alles die Genauigkeit von double. */
- zaehler = FLIESE_NEU; fliesen = -FLIESE_NEU; err = 0;
+ zaehler = FLIESE_NEU; tiles = -FLIESE_NEU; err = 0;
  /* while (x_0 >= x_0_anf) ... . */
  while ((x_0[1] > x_0_anf[1]) ||
        ((x_0[1] == x_0_anf[1]) && (x_0[0] >= x_0_anf[0]))) {
   /* mpf_set_mpx (tmp1, x_0);
-  gmp_sprintf (ausg, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
+  gmp_sprintf (output, "\nx_0 = %.*Ff.\n", 40, tmp1); out (); */
 
-  berechne_y_wert (y_0);
+  compute_y_value (y_0);
   /* Beim ersten Mal ist y_diff = 0 => y_0 wird richtig ausgerechnet. */
   /* mpf_set_mpx (tmp1, y_0);
-  gmp_sprintf (ausg, "y_0 = %.*Ff.\n\n", 40, tmp1); out (); */
+  gmp_sprintf (output, "y_0 = %.*Ff.\n\n", 40, tmp1); out (); */
   berechne_y_strich (y_0);
   /* Beim ersten Mal ist y_inv_diff = 0 => y'(x_0) wird richtig ausgerechnet. */
   /* mpf_set_mpx (tmp1, Ax);
-  gmp_sprintf (ausg, "A = %.*Ff.\n\n", 40, tmp1); out (); */
+  gmp_sprintf (output, "A = %.*Ff.\n\n", 40, tmp1); out (); */
 
   if (zaehler == FLIESE_NEU) {
-   zaehler = 0; fliesen += FLIESE_NEU;
-   berechne_fliesenformat (schrittweite);
-   y_inv_init (y_0); y_diff_init (y_0, schrittweite);
+   zaehler = 0; tiles += FLIESE_NEU;
+   compute_tile_params (step);
+   y_inv_init (y_0); y_diff_init (y_0, step);
   }
 
   /* Letztes v war nicht korrekt wegen Overflow. */
   if (err > 0) {
    init (v, y_0, x_0,
-           halbe_schrittweite, fliesenversatz, halbe_fliesenbreite, UPPER_BOUND);
+           half_step, tile_offset, half_tilewidth, UPPER_BOUND);
    mpf_set_mpx (tmp1, x_0);
-   gmp_sprintf (ausg, "Neustart bei x_0 = %.*Ff.\n", 25, tmp1); out ();
+   gmp_sprintf (output, "Neustart bei x_0 = %.*Ff.\n", 25, tmp1); out ();
   }
 
-  berechne_drei_linearf (lf, v, y_0, halbe_fliesenbreite, UPPER_BOUND);
+  compute_three_linearf (lf, v, y_0, half_tilewidth, UPPER_BOUND);
 
   lll (lf, e);
   err = matrix_prod (v, e, v); /* v ist auf jeden Fall richtig modulo 2**64. */
  
   lf_neu (ln, lf, e);
   anz = kleine_vect (ln, v);
-  /* sprintf (ausg, "Finden %ld Gitterpunkte.\n", anz); out (); */
+  /* sprintf (output, "Finden %ld Gitterpunkte.\n", anz); out (); */
 
   /* Fliesen gehen von x_0 nach rechts und links. */
-  mpx_sub (x_0, x_0, schrittweite); zaehler++;
+  mpx_sub (x_0, x_0, step); zaehler++;
  }
 
- sprintf (ausg, "Insgesamt %ld Fliesen behandelt.\n", fliesen + zaehler);
+ sprintf (output, "Insgesamt %ld Fliesen behandelt.\n", tiles + zaehler);
  out ();
 }
 
@@ -981,7 +979,7 @@ int main (int argc, char *argv[]) {
  mpf_set_str (tmp1, argv[1], 10); mpx_set_mpf (x_0_anf, tmp1);
  mpf_set_str (tmp2, argv[2], 10); mpx_set_mpf (diff, tmp2);
 
- zeile = 1;
+ row = 1;
  mpx_add (x_0_ende, x_0_anf, diff);
 
  /* Name der Ausgabedatei */
@@ -989,7 +987,7 @@ int main (int argc, char *argv[]) {
  gmp_sprintf (file, "liste_allg_%.*Ff_%.*Ff.txt", 8, tmp1, 8, tmp2);
 
  /* Erste Ausgabe */
- gmp_sprintf (ausg, "Starte Rechnung von %.*Ff bis %.*Ff.\n",
+ gmp_sprintf (output, "Starte Rechnung von %.*Ff bis %.*Ff.\n",
                                                       15, tmp1, 15, tmp2);
  out ();
 
