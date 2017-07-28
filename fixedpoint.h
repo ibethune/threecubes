@@ -1,6 +1,6 @@
 /****************************************************************
 
-file festkomma.h
+file fixedpoint.h
 
 Elkies package for the three cubes problem,
 Version 1.0
@@ -33,19 +33,17 @@ WWW     http://www.uni-math.gwdg.de/jahnel
 
 *****************************************************************/
 
-
 #include<gmp.h>
 
 typedef unsigned long int UDItype;
 typedef long int           DItype;
 typedef UDItype ulong;
 
-
 #define MAX(h, i) ((h) > (i) ? (h) : (i))
 #define MIN(h, i) ((h) < (i) ? (h) : (i))
 
-/* Der g++-Compiler vertraegt die normalen Makros add_ssaaaa und subf_ddmmss
-   nicht, weil da ein seltsamer Cast beim Schreiben gemacht werden soll. */
+/* g++ confuses the usual macros add_ssaaaa and subf_ddmmss, because of the unusual
+waythe casting is used (?) */
 #define addf_ssaaaa(sh, sl, ah, al, bh, bl)                       \
   __asm__ ("addq %5,%1\n\tadcq %3,%0"                             \
            : "=r" (sh),           "=&r" (sl)                      \
@@ -69,65 +67,64 @@ typedef UDItype ulong;
 	   : "%0" ((DItype)(u)), "rm" ((DItype)(v)))
 
 
-/* Kann zwei Sorten von Festkommazahlen kodieren. 
-   1. Eine Zahl zwischen 0 und 1 mit Genauigkeit 2*(-128) nach der Regel
+/* We can encode two different varieties of fixed-point numbers:
+   1. A number between 0 and 1 with precision 2^-128, with the format
           fixed[1] * 2**(-64) + fixed[0] * 2**(-128).
-      Datentyp "mpx_t".
-   2. Eine vorzeichenbehaftete Zahl zwischen (-2**63) und 2**63 mit Genauigkeit
-      2*(-64) nach der Regel
+      Datatype "mpx_t".
+   2. A signed number between -2^63 and 2^63 with precision 2^-64, with the format
           (signed long) fixed[1] + fixed[0] * 2**(-64).
-      Datentyp "mpxg_t". */
+      Datatype "mpxg_t". */
 typedef unsigned long int mpx_t [2];
 
 
-/* Die naive Umrechnung von mpxg_t in double. */
+/* Naive conversion from mpxg_t to double. */
 #define mpxg_get_d_simple(fixed)                                  \
   (ldexp (((double) (fixed)[0]), -64)                             \
 + ((double) ((signed long) (fixed)[1])))
 
 
-/* Umrechnung von mpxg_t in double.
-   Wollen bei Werten nahe 0 besonders grosze Genauigkeit.
-   Auch bei solchen knapp unter 0, die als
+/* Convert mpxg_t to double.
+   If the value is close to 0, the accuracy is very good
+   Even for those just below 0, encoded as
          (-1) + fixed[0] * 2**(-64) kodiert
-   sind. */
+   */
 inline double mpxg_get_d (mpx_t fixed) {
- /* fixed[0] >= 2**63 <==> gebrochener Teil >= 0.5. */
+ /* fixed[0] >= 2**63 <==> broken(?) part >= 0.5. */
  if ((signed long) fixed[0] < 0) {
-  /* Kuenstlich komplizierte Umrechnung in double.
-     Der erste Summand ist [erg] - 1, was eventuell betragsmaeszig klein ist
-     und sehr genau in double umgerechnet werden kann. */
+  /* Artificiallly complicated converstion into double.
+     The first summand is [erg] - 1, which may be small in magnitude
+     and can be converted very precisely into double. */
   return (- ldexp (((double) -fixed[0]), -64)
                  + ((double) (1 + (signed long) fixed[1])));
  }
- /* Die naive Umrechnung in double.
- fixed[1] soll als signed verstanden werden. */
+ /* Naive conversion into double.
+ fixed[1] is taken to be signed. */
  return (   ldexp (((double) fixed[0]), -64) 
                  + ((double) ((signed long) fixed[1])));
 }
 
 
-/* Die naive Umrechnung von mpx_t in double. */
+/* Naive conversion from mpx_t to double. */
 #define mpx_get_d(fixed)                                          \
    (ldexp (((double) (fixed)[1]), -64)                            \
  + ldexp (((double) (fixed)[0]), -128))
 
 
-/* Voraussetzung: 0 < floa < 1. */
+/* Prerequisite: 0 < floa < 1. */
 inline void mpx_set_d (mpx_t erg, double floa) {
  floa = ldexp (floa, 64);
  erg[1] = (ulong) floor (floa);
  floa -= erg[1];
  floa = ldexp (floa, 64);
  erg[0] = (ulong) floor (floa);
- /* Hier darf kein lround stehen. Gibt Probleme bei Zahlen >2**63! */
+ /* Cannot use lround due to problems with numbers > 2^63! */
 }
 
 
-/* Voraussetzungen: 0 < floa < 1. Precision von fl >=128 Bit. 
-   Achtung: Extrem ineffizient! */
+/* Prerequisite: 0 < floa < 1. Precision of fl >=128 bit. 
+   Warning: Extremely inefficient! */
 inline void mpx_set_mpf (mpx_t erg, mpf_t fl) {
- /* Effizienter Code saehe so aus:
+ /* Efficient code looks like:
  mp_ptr  ptr;
  long    pos;
  ptr = PTR (fl);
@@ -147,7 +144,7 @@ inline void mpx_set_mpf (mpx_t erg, mpf_t fl) {
 }
 
 
-/* Zur Ausgabe mit gmp_printf gedacht. Hat sicher Optimierungspotential. */
+/* For output with gmp_printf(). Can certainly be optimized. */
 inline void mpf_set_mpx (mpf_t erg, mpx_t fixed) {
  mpf_set_ui (erg, fixed[0]);
  mpf_div_2exp (erg, erg, 64);
@@ -156,57 +153,56 @@ inline void mpf_set_mpx (mpf_t erg, mpx_t fixed) {
 }
 
 
-/* Produkt zweier mpx_t-Zahlen (128-Bit Festkommazahlen zwischen 0 und 1).
-   Nicht fuer Datentyp mpxg_t. */
+/* Produce of two mpx_t-numbers (128-Bit fixed point number between 0 and 1).
+   Not for mpxg_t types. */
 inline void mpx_mul (mpx_t erg, mpx_t fak1, mpx_t fak2) {
  ulong  argh, argl;
 
- /* Hauptteil des Produkts. */
+ /* Main part of the product */
  umul_ppmm (erg[1], erg[0], fak1[1], fak2[1]);
- /* Multiplikation ueber Kreuz. Ignorieren das dritte Limb. */
+ /* Cross-multiply, ignoring the third limb. */
  umul_ppmm (argh, argl, fak1[1], fak2[0]);
  addf_ssaaaa (erg[1], erg[0], erg[1], erg[0], 0L, argh);
- /* Multiplikation ueber Kreuz andersrum. Ignorieren wieder das dritte Limb. */
+ /* Cross-multiply again, stil ignoring the third limb. */
  umul_ppmm (argh, argl, fak1[0], fak2[1]);
  addf_ssaaaa (erg[1], erg[0], erg[1], erg[0], 0L, argh);
- /* Lassen das Produkt der niederwertigen Limbs komplett weg. */
+ /* Leaves out the prpduct of the low-value limbs entirely. */
 }
 
 
-/* Vorzeichenloses Festkomma * long.
-   fix ist vorzeichenloses Festkomma, also vom Datentyp mpx_t.
-   Das Ergebnis erg ist vorzeichenbehaftetes Festkomma vom Datentyp mpxg_t. */
+/* Unsigned fixed-point multiplied by long.
+   fix is unsigned fixed-point i.e. mpx_t type.
+   The result erg is a signed fixed-point of type mpxg_t. */
 inline void mpx_mul_si (mpx_t erg, mpx_t fix, long ganz) {
  ulong  argh, argl;
 
- /* Behandle ganz als vorzeichenlos. */
+ /* Treat completely as unsigned */
  umul_ppmm (erg[1], erg[0], fix[1], ganz);
  umul_ppmm (argh, argl, fix[0], ganz);
- /* Ignorieren argl. */
+ /* Ignore argl. */
  addf_ssaaaa (erg[1], erg[0], erg[1], erg[0], 0, argh);
 
- /* Korrektur falls ganz < 0.
-    Wir haben bei ganz mit einem Fehler von exakt 2**64 gerechnet. */
+ /* Correction when < 0.
+    We computed with an error of exactly 2^64 */
  if (ganz < 0)
   subf_ddmmss (erg[1], erg[0], erg[1], erg[0], fix[1], fix[0]);
 }
 
 
-/* Klappt bei mpx_t wie bei mpxg_t. */
+/* Sum two mpx_t into an mpxg_t */
 #define mpx_add(summe, summand1, summand2)                        \
  addf_ssaaaa (summe[1], summe[0], summand1[1], summand1[0],       \
                                   summand2[1], summand2[0])
 
 
-/* Klappt bei mpx_t wie bei mpxg_t. */
+/* Subtract two  mpx_t into an mpxg_t. */
 #define mpx_sub(differenz, minuend, subtrahend)                   \
  subf_ddmmss (differenz[1], differenz[0], minuend[1], minuend[0], \
                                     subtrahend[1], subtrahend[0])
 
 
-/* Klappt bei summand1 vom Datentyp mpx_t oder mpxg_t. summand2 ist eine long.
-   Auf Overflow ist auch hier, wie immer bei add und sub, bei der Anwendung
-   zu achten. */
+/* Sum of and mpx_t and a long.
+   We pay attention to make sure overflow is handled correctly.*/
 #define mpxb_add_si(summe, summand1, summand2)                    \
  addf_ssaaaa (summe[1], summe[0], summand1[1], summand1[0],       \
                                                     summand2, 0)
